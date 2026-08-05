@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Portails{% endblock %}
+{% block content %}
+  <h1 class="page-title">Portails</h1>
+  <p class="page-sub">Points d'entrée équipés de caméras. Un seul portail peut être actif à la fois (une caméra locale disponible sur ce poste).</p>
+
+  <div class="card">
+    <h2>Portails enregistrés</h2>
+    {% if portails %}
+    <div class="table-wrap">
+      <table>
+        <tr><th>Nom</th><th>Source caméra</th><th>Statut</th><th></th></tr>
+        {% for p in portails %}
+        <tr>
+          <td>{{ p.nom }}</td>
+          <td>{{ p.camera_source }}</td>
+          <td>
+            {% if p.actif %}<span class="badge badge-charge">Actif</span>
+            {% else %}<span class="badge badge-neutre">Inactif</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if not p.actif %}
+            <form method="post">
+              <input type="hidden" name="action" value="activer">
+              <input type="hidden" name="portail_id" value="{{ p.id }}">
+              <button type="submit" class="btn btn-secondary btn-sm">Activer</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Aucun portail enregistré.</p>
+    {% endif %}
+  </div>
+
+  <div class="card form-card">
+    <h2>Ajouter un portail</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="ajouter">
+      <div class="field">
+        <label for="nom">Nom du portail</label>
+        <input type="text" id="nom" name="nom" placeholder="ex. Terminal Conteneurs" required>
+      </div>
+      <div class="field">
+        <label for="camera_source">Source caméra</label>
+        <input type="text" id="camera_source" name="camera_source" placeholder="index webcam (0, 1…) ou URL RTSP" required>
+        <span class="hint">Le nouveau portail est ajouté inactif — cliquez "Activer" dans la liste pour y basculer le flux.</span>
+      </div>
+      <div class="field">
+        <button type="submit" class="btn btn-primary">Ajouter</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Accueil{% endblock %}
+{% block content %}
+  <h1 class="page-title">Portail — {{ portail.nom }}</h1>
+  <p class="page-sub">Surveillance en direct du taux de remplissage des camions à l'entrée du portail.</p>
+
+  {% if request.args.get('erreur') == 'camera' %}
+    <div class="alert alert-error">Caméra du portail indisponible — vérifiez la connexion de la source vidéo.</div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Flux en direct</h2>
+    <div class="meta-row">
+      <span>Source caméra : <strong>{{ portail.camera_source if portail else '—' }}</strong></span>
+    </div>
+    {% if camera_ok %}
+    <div class="video-frame">
+      <span class="live-badge"><span class="live-dot"></span>En direct</span>
+      <img src="{{ url_for('video_feed') }}" alt="Flux caméra en direct">
+    </div>
+    <form action="/capturer" method="post" style="margin-top:1.25rem;">
+      <button type="submit" class="btn btn-primary">Enregistrer la détection actuelle dans l'historique</button>
+    </form>
+    {% else %}
+    <p class="empty-state">
+      Aucune caméra en direct disponible sur ce serveur (source injoignable ou absente — normal sur un hébergement cloud sans webcam locale).<br>
+      Utilisez <a class="link" href="{{ url_for('analyser') }}">Analyser une photo</a> pour envoyer une image manuellement, ou configurez une caméra IP (RTSP) dans <a class="link" href="{{ url_for('portails') }}">Portails</a>.
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Dernières détections</h2>
+    {% if detections %}
+    <div class="table-wrap">
+      <table>
+        <tr><th>Horodatage</th><th>Statut</th><th>% bleu</th><th>Confiance</th></tr>
+        {% for d in detections %}
+        <tr>
+          <td>{{ d.horodatage }}</td>
+          <td>
+            {% if d.statut == 'Chargé' %}<span class="badge badge-charge">Chargé</span>
+            {% elif d.statut == 'Vide' %}<span class="badge badge-vide">Vide</span>
+            {% else %}<span class="badge badge-neutre">{{ d.statut }}</span>
+            {% endif %}
+          </td>
+          <td>{{ (d.ratio_bleu * 100) | round(1) }}%</td>
+          <td>{{ (d.confiance * 100) | round(1) if d.confiance else '—' }}%</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Aucune capture enregistrée pour l'instant.</p>
+    {% endif %}
+  </div>
+{% endblock %}

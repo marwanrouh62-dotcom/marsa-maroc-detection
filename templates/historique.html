@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Historique{% endblock %}
+{% block content %}
+  <h1 class="page-title">Historique des détections</h1>
+  <p class="page-sub">Portail — {{ portail.nom }}</p>
+
+  <div class="card">
+    <form class="form-row" method="get">
+      <div class="field">
+        <label for="date">Date</label>
+        <input type="date" id="date" name="date" value="{{ date }}">
+      </div>
+      <div class="field">
+        <label for="statut">Statut</label>
+        <select id="statut" name="statut">
+          <option value="" {% if statut == '' %}selected{% endif %}>Tous</option>
+          <option value="Chargé" {% if statut == 'Chargé' %}selected{% endif %}>Chargé</option>
+          <option value="Vide" {% if statut == 'Vide' %}selected{% endif %}>Vide</option>
+          <option value="Aucun camion" {% if statut == 'Aucun camion' %}selected{% endif %}>Aucun camion</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Filtrer</button>
+      <a href="/historique" class="btn btn-secondary">Réinitialiser</a>
+      <a href="{{ url_for('export_csv', date=date, statut=statut) }}" class="btn btn-secondary" style="margin-left:auto;">Exporter CSV</a>
+    </form>
+  </div>
+
+  <div class="card">
+    {% if detections %}
+    <div class="table-wrap">
+      <table>
+        <tr><th>Horodatage</th><th>Statut</th><th>% bleu</th><th>Confiance</th><th>Image</th><th>Correction</th></tr>
+        {% for d in detections %}
+        <tr>
+          <td>{{ d.horodatage }}</td>
+          <td>
+            {% if d.statut == 'Chargé' %}<span class="badge badge-charge">Chargé</span>
+            {% elif d.statut == 'Vide' %}<span class="badge badge-vide">Vide</span>
+            {% else %}<span class="badge badge-neutre">{{ d.statut }}</span>
+            {% endif %}
+            {% if d.corrige %}<span class="badge-note">corrigé (détecté : {{ d.statut_original }})</span>{% endif %}
+          </td>
+          <td>{{ (d.ratio_bleu * 100) | round(1) }}%</td>
+          <td>{{ (d.confiance * 100) | round(1) if d.confiance else '—' }}%</td>
+          <td><a class="link" href="{{ url_for('static', filename=d.image_path) }}" target="_blank">voir</a></td>
+          <td>
+            {% if d.statut in ('Chargé', 'Vide') %}
+            <form class="correction-form" action="{{ url_for('corriger', detection_id=d.id) }}" method="post">
+              <select name="statut">
+                <option value="Chargé" {% if d.statut == 'Chargé' %}selected{% endif %}>Chargé</option>
+                <option value="Vide" {% if d.statut == 'Vide' %}selected{% endif %}>Vide</option>
+              </select>
+              <button type="submit" class="btn btn-secondary btn-sm">Corriger</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">Aucune détection enregistrée.</p>
+    {% endif %}
+  </div>
+{% endblock %}

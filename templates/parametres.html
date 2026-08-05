@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Paramètres{% endblock %}
+{% block content %}
+  <h1 class="page-title">Paramètres de détection</h1>
+  <p class="page-sub">Réglages appliqués en direct au flux caméra, sans redémarrage.</p>
+
+  {% if enregistre %}
+  <div class="alert alert-success">Paramètres enregistrés et appliqués au flux en direct.</div>
+  {% endif %}
+
+  <div class="card form-card">
+    <h2>Seuils de décision</h2>
+    <form method="post">
+      <div class="field">
+        <label for="seuil_bleu">Seuil de décision (% pixels bleus pour "Chargé")</label>
+        <input type="number" step="0.01" min="0" max="1" id="seuil_bleu" name="seuil_bleu" value="{{ params.seuil_bleu }}">
+        <span class="hint">Valeur entre 0 et 1, ex. 0.30 = 30%</span>
+      </div>
+
+      <div class="field">
+        <label for="top_ratio">Fraction haute de la bbox exclue (cabine)</label>
+        <input type="number" step="0.01" min="0" max="0.9" id="top_ratio" name="top_ratio" value="{{ params.top_ratio }}">
+        <span class="hint">Part du camion en partant du haut considérée comme cabine, non analysée</span>
+      </div>
+
+      <div class="field">
+        <label for="side_margin">Marge latérale rognée de la ROI</label>
+        <input type="number" step="0.01" min="0" max="0.4" id="side_margin" name="side_margin" value="{{ params.side_margin }}">
+        <span class="hint">Bords gauche/droite retirés de la zone benne analysée</span>
+      </div>
+
+      <div class="field">
+        <button type="submit" class="btn btn-primary">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

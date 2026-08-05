@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion — Marsa Maroc</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:linear-gradient(180deg, var(--navy-900), var(--navy-800));">
+    <div class="card form-card" style="width:340px;">
+      <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:1.25rem;">
+        <span class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
+            <path d="M6 21h20M9 21v-6h9l4 4v2M9 15V9h6v6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="23" r="1.6" fill="#fff"/>
+            <circle cx="22" cy="23" r="1.6" fill="#fff"/>
+          </svg>
+        </span>
+        <div>
+          <div style="font-weight:700; color:var(--navy-900);">Marsa Maroc</div>
+          <div style="font-size:0.75rem; color:var(--text-muted);">Détection remplissage camions</div>
+        </div>
+      </div>
+
+      {% if erreur %}
+      <div class="alert alert-error">{{ erreur }}</div>
+      {% endif %}
+
+      <form method="post">
+        <div class="field">
+          <label for="identifiant">Identifiant</label>
+          <input type="text" id="identifiant" name="identifiant" autocomplete="username" required>
+        </div>
+        <div class="field">
+          <label for="mot_de_passe">Mot de passe</label>
+          <input type="password" id="mot_de_passe" name="mot_de_passe" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+          <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Se connecter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

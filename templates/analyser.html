@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Analyser une photo{% endblock %}
+{% block content %}
+  <h1 class="page-title">Analyser une photo</h1>
+  <p class="page-sub">Envoyez une photo du camion (pas besoin de caméra en direct) — utile quand le serveur n'a pas accès à une caméra locale.</p>
+
+  {% if erreur == 'fichier' %}
+  <div class="alert alert-error">Sélectionnez une image avant d'envoyer.</div>
+  {% elif erreur == 'format' %}
+  <div class="alert alert-error">Fichier illisible — envoyez une image JPG ou PNG.</div>
+  {% endif %}
+
+  <div class="card form-card">
+    <h2>Envoyer une image</h2>
+    <form method="post" enctype="multipart/form-data">
+      <div class="field">
+        <label for="image">Photo du camion</label>
+        <input type="file" id="image" name="image" accept="image/*" required>
+      </div>
+      <div class="field">
+        <button type="submit" class="btn btn-primary">Analyser</button>
+      </div>
+    </form>
+  </div>
+
+  {% if resultat %}
+  <div class="card">
+    <h2>Résultat</h2>
+    <img class="video-frame" style="display:block; max-width:640px;" src="{{ url_for('static', filename=resultat.image_path) }}" alt="Résultat annoté">
+    <p style="margin-top:1rem;">
+      Statut :
+      {% if resultat.statut == 'Chargé' %}<span class="badge badge-charge">Chargé</span>
+      {% elif resultat.statut == 'Vide' %}<span class="badge badge-vide">Vide</span>
+      {% else %}<span class="badge badge-neutre">{{ resultat.statut }}</span>
+      {% endif %}
+      — {{ (resultat.ratio_bleu * 100) | round(1) }}% bleu
+      {% if resultat.confiance %} — confiance {{ (resultat.confiance * 100) | round(1) }}%{% endif %}
+    </p>
+    <p class="page-sub">Enregistré dans l'historique.</p>
+  </div>
+  {% endif %}
+{% endblock %}
