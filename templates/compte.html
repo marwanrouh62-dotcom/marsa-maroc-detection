@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Mon compte{% endblock %}
+{% block content %}
+  <h1 class="page-title">Mon compte</h1>
+  <p class="page-sub">Connecté en tant que {{ session.utilisateur }}.</p>
+
+  {% if succes %}
+  <div class="alert alert-success">{{ succes }}</div>
+  {% endif %}
+  {% if erreur %}
+  <div class="alert alert-error">{{ erreur }}</div>
+  {% endif %}
+
+  <div class="card form-card">
+    <h2>Changer le mot de passe</h2>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label for="mot_de_passe_actuel">Mot de passe actuel</label>
+        <input type="password" id="mot_de_passe_actuel" name="mot_de_passe_actuel" autocomplete="current-password" required>
+      </div>
+      <div class="field">
+        <label for="nouveau_mot_de_passe">Nouveau mot de passe</label>
+        <input type="password" id="nouveau_mot_de_passe" name="nouveau_mot_de_passe" autocomplete="new-password" minlength="8" required>
+        <span class="hint">8 caractères minimum</span>
+      </div>
+      <div class="field">
+        <label for="confirmation">Confirmer le nouveau mot de passe</label>
+        <input type="password" id="confirmation" name="confirmation" autocomplete="new-password" minlength="8" required>
+      </div>
+      <div class="field">
+        <button type="submit" class="btn btn-primary">Changer le mot de passe</button>
+      </div>
+    </form>
+  </div>
+{% endblock %}

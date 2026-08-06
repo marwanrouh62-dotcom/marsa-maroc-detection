@@ -13,7 +13,6 @@ Puis exécute le pipeline complet sur chaque variante et rapporte le statut.
 import os
 
 import cv2
-import numpy as np
 
 from pipeline import annotate_frame, run_pipeline
 

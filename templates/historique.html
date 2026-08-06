@@ -42,10 +42,11 @@
           </td>
           <td>{{ (d.ratio_bleu * 100) | round(1) }}%</td>
           <td>{{ (d.confiance * 100) | round(1) if d.confiance else '—' }}%</td>
-          <td><a class="link" href="{{ url_for('static', filename=d.image_path) }}" target="_blank">voir</a></td>
+          <td><a class="link" href="{{ url_for('voir_capture', filename=d.image_path) }}" target="_blank">voir</a></td>
           <td>
             {% if d.statut in ('Chargé', 'Vide') %}
             <form class="correction-form" action="{{ url_for('corriger', detection_id=d.id) }}" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <select name="statut">
                 <option value="Chargé" {% if d.statut == 'Chargé' %}selected{% endif %}>Chargé</option>
                 <option value="Vide" {% if d.statut == 'Vide' %}selected{% endif %}>Vide</option>

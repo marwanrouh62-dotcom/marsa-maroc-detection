@@ -17,29 +17,43 @@
 | `pipeline.py` | Pipeline de détection partagé (YOLO + ROI + HSV), utilisé par le CLI et le backend. |
 | `tarp_analysis.py` | Extraction ROI benne + calcul % pixels bleus + décision Chargé/Vide. Constantes HSV et seuil par défaut. |
 | `db.py` | Accès SQLite : portails, détections, paramètres réglables, corrections manuelles, utilisateurs. |
-| `app.py` | Serveur Flask : authentification par session, thread caméra en continu (avec bascule dynamique de portail actif), flux `/video_feed`, routes `/`, `/capturer`, `/historique` (+ export CSV), `/portails`, `/parametres`. |
+| `app.py` | Serveur Flask : authentification par session + CSRF, thread caméra résilient (avec bascule dynamique de portail actif), flux `/video_feed`, routes `/`, `/capturer`, `/analyser`, `/historique` (+ export CSV), `/portails`, `/parametres`, `/compte`, `/captures/<fichier>`. |
 | `detect_truck.py` | Script CLI Jour 1 : détection camion seule (démo/debug). |
 | `detect_status.py` | Script CLI Jour 2+ : pipeline complet camion + bâche sur image/vidéo/webcam. |
 | `test_conditions.py` | Script de test de robustesse (luminosité, contraste, flou, angle) sur images réelles. |
-| `templates/` | Pages Jinja2 (`base.html`, `index.html`, `historique.html`, `parametres.html`, `portails.html`, `login.html`). |
+| `templates/` | Pages Jinja2 (`base.html`, `index.html`, `analyser.html`, `historique.html`, `parametres.html`, `portails.html`, `compte.html`, `login.html`). |
 | `static/css/style.css` | Feuille de style unique partagée par toutes les pages. |
 | `test_images/` | Photos de test réelles + variantes générées, utilisées pour valider le pipeline. |
-| `static/captures/` | Images annotées enregistrées via le bouton "Enregistrer". |
-| `RAPPORT_TESTS.md` | Rapport de tests consolidé (détection, HSV, robustesse, fonctionnel). |
+| `captures/` | Images annotées enregistrées via "Enregistrer" ou "Analyser une photo". **Hors de `static/`** volontairement (voir §3ter) — servi par une route protégée. |
+| `RAPPORT_TESTS.md` | Rapport de tests consolidé (détection, HSV, robustesse, fonctionnel, sécurité). |
 
 ## 3. Base de données (SQLite)
 
 - **`portails`** : `id`, `nom`, `camera_source` (index webcam ou URL RTSP), `actif`. Portail initial : "Terminal Polyvalent" (`camera_source = "0"`). Un seul portail `actif=1` à la fois (`db.set_portail_actif()` désactive les autres).
 - **`detections`** : `id`, `portail_id`, `statut`, `ratio_bleu`, `confiance`, `image_path`, `horodatage`, `statut_original`, `corrige`.
 - **`parametres`** : `cle`/`valeur` — `seuil_bleu` (défaut 0.30), `top_ratio` (défaut 0.35), `side_margin` (défaut 0.05).
-- **`utilisateurs`** : `id`, `identifiant`, `mot_de_passe_hash` (Werkzeug `generate_password_hash`). Compte `admin`/`admin123` créé automatiquement si la table est vide au premier démarrage.
+- **`utilisateurs`** : `id`, `identifiant`, `mot_de_passe_hash` (Werkzeug `generate_password_hash`). Compte `admin`/`admin123` créé automatiquement si la table est vide au premier démarrage. Changeable via `/compte` (appelle `db.set_mot_de_passe()`).
 
 `db.init_db()` crée le schéma et migre automatiquement les colonnes manquantes sur une base existante (`ALTER TABLE`).
 
 ## 3bis. Authentification et multi-portails
 
-- **Auth** : session Flask (`app.secret_key = os.urandom(24)`, régénérée à chaque démarrage — les sessions ne survivent pas à un redémarrage du serveur, acceptable pour un usage local). Décorateur `login_required` sur toutes les routes sauf `/login`. Mot de passe vérifié via `werkzeug.security.check_password_hash`.
+- **Auth** : session Flask. `app.secret_key` lit la variable d'environnement `SECRET_KEY` si définie, sinon génère une clé aléatoire au démarrage (déconnexion de tous les agents à chaque redémarrage dans ce cas — à définir explicitement pour un déploiement cloud redéployé fréquemment). Décorateur `login_required` sur toutes les routes sauf `/login`. Mot de passe vérifié via `werkzeug.security.check_password_hash`.
 - **Multi-portails** : le thread caméra (`camera_worker` dans `app.py`) relit `db.get_portail_actif()` toutes les `PORTAIL_POLL_INTERVAL` (1s) et rouvre la capture vidéo si le portail actif a changé (`cv2.VideoCapture` fermé/rouvert). Une seule caméra est donc pilotée à la fois — le multi-portails ici gère plusieurs configurations de caméra, pas plusieurs flux simultanés (limite matérielle du poste local, pas de l'architecture DB).
+
+## 3ter. Sécurité
+
+Un audit du projet (2026-08-06) a identifié et corrigé plusieurs points :
+
+- **Captures/uploads non protégés** : `CAPTURES_DIR` était sous `static/`, servi sans authentification par la route par défaut de Flask — n'importe qui pouvait deviner un nom de fichier (`capture_<timestamp>.jpg`) et voir la photo. Déplacé hors de `static/`, servi désormais par `/captures/<fichier>` sous `@login_required`.
+- **Thread caméra non résilient** : `camera_worker` n'avait aucun `try/except` — une exception (ex. paramètre corrompu) le tuait silencieusement et figeait le flux en direct jusqu'au redémarrage du process. La boucle est maintenant protégée par un `try/except` qui logue et continue.
+- **Paramètres non validés côté serveur** : `/parametres` acceptait n'importe quelle valeur (les `min`/`max` HTML sont contournables). Une valeur hors bornes ou non numérique aurait fait planter `camera_worker` au prochain calcul. Validation server-side ajoutée (`BORNES_PARAMETRES`), avec messages d'erreur si hors limites.
+- **Pas de limite de taille d'upload** : `/analyser` n'avait pas de `MAX_CONTENT_LENGTH` — un upload volumineux/répété pouvait épuiser la mémoire. Limité à 10 Mo.
+- **Open redirect** : `/historique/corriger` redirigeait vers `request.referrer` (contrôlable par l'attaquant). Remplacé par une redirection fixe vers `/historique`.
+- **CSRF** : aucune protection n'existait sur les routes POST authentifiées. Ajout d'un token CSRF léger (`secrets.token_hex`, stocké en session, vérifié via `@app.before_request` sur toute requête POST, comparé au champ caché `csrf_token` de chaque formulaire). ⚠️ Le premier correctif comparait `request.form.get(...) != session.get(...)` sans vérifier que les deux étaient non-vides : une requête sans cookie de session passait quand même (`None != None` est faux). Corrigé pour exiger un token de session ET un token de formulaire non vides et identiques.
+- **Pas de changement de mot de passe** : `db.set_mot_de_passe()` existait mais n'était appelée nulle part. Route `/compte` ajoutée (mot de passe actuel requis, 8 caractères minimum, confirmation).
+
+Non traité (accepté comme limite, cf. §8) : pas de limitation du nombre de tentatives sur `/login` (brute-force), pas de nettoyage automatique de `captures/`.
 
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 
@@ -71,9 +85,10 @@ Serveur sur `http://127.0.0.1:5000`. Dépendances dans `requirements.txt` (`pip 
 
 ## 8. Limites de déploiement actuelles
 
-- Authentification basique (session + mot de passe), pas de SSO (explicitement exclu du cahier des charges). Pas de gestion des rôles (agent/superviseur/administrateur) ni de page de changement de mot de passe dans cette version — un seul niveau d'accès.
+- Authentification basique (session + mot de passe), pas de SSO (explicitement exclu du cahier des charges). Pas de gestion des rôles (agent/superviseur/administrateur) — un seul niveau d'accès, un seul compte.
 - Multi-portails : un seul flux caméra actif à la fois (voir §3bis) — adapté à un poste de contrôle local avec une caméra à la fois, pas à une supervision multi-portails simultanée.
-- Clé de session générée aléatoirement à chaque démarrage (déconnexion de tous les agents à chaque redémarrage du serveur).
+- Pas de limitation des tentatives de connexion (`/login`) — acceptable pour un compte admin unique à usage interne, mais à ajouter avant une exposition plus large.
+- Pas de nettoyage automatique de `captures/` — croissance disque illimitée sur un déploiement de longue durée.
 
 ## 9. Déploiement cloud (Render, Railway, etc.)
 
@@ -92,7 +107,7 @@ Serveur sur `http://127.0.0.1:5000`. Dépendances dans `requirements.txt` (`pip 
 
 ### Persistance des données
 
-⚠️ **`marsa_maroc.db` et `static/captures/` sont écrits sur le disque du conteneur.** Sur la plupart des offres gratuites (Render, Railway), le système de fichiers est **éphémère** : historique et images capturées sont perdus à chaque redéploiement ou redémarrage du conteneur, sauf si un volume/disque persistant est attaché (fonctionnalité généralement payante). À prévoir avant une mise en production réelle.
+⚠️ **`marsa_maroc.db` et `captures/` sont écrits sur le disque du conteneur.** Sur la plupart des offres gratuites (Render, Railway), le système de fichiers est **éphémère** : historique et images capturées sont perdus à chaque redéploiement ou redémarrage du conteneur, sauf si un volume/disque persistant est attaché (fonctionnalité généralement payante). À prévoir avant une mise en production réelle.
 
 ### Ressources nécessaires
 

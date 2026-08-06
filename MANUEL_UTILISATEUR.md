@@ -15,17 +15,26 @@ L'application se connecte automatiquement à la caméra du portail actif (par d�
 
 L'accès à l'application nécessite une authentification.
 
-- Identifiant par défaut : `admin`
-- Mot de passe par défaut : `admin123`
+- Identifiant par défaut (première installation uniquement) : `admin`
+- Mot de passe par défaut (première installation uniquement) : `admin123`
 
-⚠️ À changer après le premier déploiement (pas d'interface de changement de mot de passe dans cette version — le modifier directement en base ou redemander au support technique).
+⚠️ **À changer immédiatement après le premier déploiement** via le menu (nom d'utilisateur en haut à droite) → **Mon compte** (voir §8). Les photos de camions et l'historique sont accessibles à quiconque est connecté — un mot de passe par défaut connu de tous compromet la confidentialité des données.
 
 ## 3. Page d'accueil
 
 - **Flux en direct** : image de la caméra du portail, rafraîchie en continu. Le statut détecté (Chargé / Vide) et le % de pixels bleus sont incrustés directement sur l'image, avec la zone du camion (cadre bleu) et la zone d'analyse de la benne (cadre vert).
 - **Bouton "Enregistrer la détection actuelle dans l'historique"** : sauvegarde l'état affiché à l'instant (image + statut + horodatage) dans la base de données.
+- Si aucune caméra n'est disponible (ex. déploiement cloud sans webcam), un message invite à utiliser **Analyser une photo** à la place.
 
-## 4. Historique
+## 4. Analyser une photo
+
+Accessible via le menu **Analyser une photo**.
+
+- Permet d'envoyer manuellement une photo de camion (JPG/PNG, 10 Mo max) et de lancer le pipeline de détection dessus, sans avoir besoin d'un flux caméra en direct.
+- Utile en particulier sur un déploiement cloud sans accès à une webcam locale, ou pour tester le système sur une photo ponctuelle.
+- Le résultat (statut, % de bleu, image annotée) s'affiche immédiatement et est enregistré dans l'historique, comme une capture en direct.
+
+## 5. Historique
 
 Accessible via le menu **Historique**.
 
@@ -34,7 +43,7 @@ Accessible via le menu **Historique**.
 - **Correction manuelle** : si un agent constate qu'un statut a été mal détecté, il peut le corriger directement depuis la liste déroulante en face de la ligne concernée et cliquer sur "Corriger". La valeur détectée automatiquement reste visible (mention "corrigé (détecté : ...)") pour garder une trace.
 - **Export CSV** : bouton "Exporter CSV" en haut de la page, respecte les filtres actifs (date/statut).
 
-## 5. Portails
+## 6. Portails
 
 Accessible via le menu **Portails**.
 
@@ -42,16 +51,24 @@ Accessible via le menu **Portails**.
 - **Ajouter un portail** : renseigner un nom et une source caméra (index webcam local comme `0`, `1`… ou URL RTSP pour une caméra IP).
 - **Activer un portail** : bascule le flux caméra de l'application sur ce portail (prend effet en quelques secondes). Un seul portail peut être actif à la fois, car l'application ne pilote qu'un seul flux vidéo à l'instant T.
 
-## 6. Paramètres
+## 7. Paramètres
 
 Accessible via le menu **Paramètres**.
 
 - **Seuil de décision** : pourcentage de pixels bleus au-delà duquel un camion est considéré "Chargé" (par défaut 30%). À augmenter si le système déclare "Chargé" trop souvent à tort ; à diminuer s'il déclare "Vide" trop souvent à tort.
 - **Fraction haute exclue (cabine)** et **marge latérale** : ajustent la zone de l'image analysée (la "benne") par rapport à la cabine et aux bords du camion. À recalibrer si la caméra du portail est positionnée différemment du cas de test (angle, distance).
+- Les valeurs sont vérifiées avant d'être enregistrées (un message d'erreur s'affiche si une valeur est hors limites ou non numérique).
 
 Les changements sont appliqués immédiatement au flux en direct, sans redémarrage.
 
-## 7. Cas particuliers
+## 8. Mon compte
+
+Accessible via le nom d'utilisateur affiché en haut à droite.
+
+- Permet de changer le mot de passe (mot de passe actuel + nouveau mot de passe, 8 caractères minimum).
+- À faire dès le premier déploiement pour remplacer le mot de passe par défaut.
+
+## 9. Cas particuliers
 
 - **Aucun camion détecté** : s'affiche quand aucun véhicule n'est dans le champ de la caméra, ou si le modèle ne le reconnaît pas (mauvais angle, trop loin).
 - **Camion sans bâche bleue** (ex. porte-conteneur) : sera classé "Vide" par la règle de décision actuelle, qui se base uniquement sur la présence de bleu — voir le manuel technique pour cette limite connue.

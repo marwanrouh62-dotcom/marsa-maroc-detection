@@ -71,8 +71,24 @@ Un assombrissement additif (`beta=-70`, réduction linéaire de chaque canal BGR
 | Export CSV | GET `/historique/export.csv` | fichier CSV valide, BOM UTF-8 (compatible Excel FR) |
 | Authentification | accès sans session → redirection `/login` ; mauvais mot de passe rejeté ; bon mot de passe → accès accordé | conforme |
 | Multi-portails | ajout d'un portail, activation, bascule caméra | activation exclusive confirmée (un seul `actif=1`), pas de crash même avec une source caméra inexistante |
+| Analyse par upload (`/analyser`) | POST multipart avec photo réelle | pipeline exécuté, statut correct, image enregistrée et affichée |
 
-## 5. Limites connues (non-bugs, limites d'approche)
+## 5. Audit de sécurité et corrections (2026-08-06)
+
+Un audit complet du code (routes, authentification, gestion des fichiers) a été mené sur l'ensemble du projet. Constats et vérifications après correctif :
+
+| Problème trouvé | Test de vérification | Résultat après correctif |
+|---|---|---|
+| Photos servies sans authentification via `/static/captures/` | GET `/captures/<fichier>` sans session ; GET `/static/captures/<fichier>` | `/captures/...` → 302 (redirigé vers login) sans session, 200 avec session ; `/static/captures/...` → 404 (le dossier n'existe plus à cet emplacement) |
+| Thread caméra sans gestion d'erreur (crash silencieux possible) | Revue de code | `try/except` ajouté autour de la boucle ; erreur loguée, thread continue |
+| Paramètres non validés côté serveur | POST `/parametres` avec `seuil_bleu=5.0` (hors bornes) et `seuil_bleu=abc` (non numérique) | Les deux rejetés avec message d'erreur explicite, valeur non persistée |
+| Pas de limite de taille d'upload | Revue de code | `MAX_CONTENT_LENGTH` = 10 Mo ajouté |
+| Open redirect sur `/historique/corriger` | Revue de code | Redirection fixe vers `/historique` |
+| Absence de protection CSRF | POST `/login` sans cookie ni token ; POST `/login` avec cookie mais sans token ; POST `/login` avec cookie + bon token | Les deux premiers → 403 ; le troisième → 302 (succès) |
+| Premier correctif CSRF incomplet (`None != None` contournable) | Même test que ci-dessus, avant le second correctif | Le premier cas (aucun cookie) renvoyait 200 (faille) au lieu de 403 — corrigé en exigeant un token de session non vide |
+| `db.set_mot_de_passe()` inaccessible depuis l'interface | POST `/compte` avec mauvais mot de passe actuel | Rejeté avec message d'erreur, mot de passe réel inchangé (vérifié en base) |
+
+## 6. Limites connues (non-bugs, limites d'approche)
 
 - La règle de décision ne détecte que la couleur bleue — un camion chargé sans bâche bleue (ex. conteneur) est classé "Vide". Comportement volontaire du cahier des charges (approche sans dataset).
 - La ROI "benne" est une heuristique géométrique (bas/arrière de la bounding box), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site.

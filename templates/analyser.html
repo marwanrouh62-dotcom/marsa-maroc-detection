@@ -13,6 +13,7 @@
   <div class="card form-card">
     <h2>Envoyer une image</h2>
     <form method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="field">
         <label for="image">Photo du camion</label>
         <input type="file" id="image" name="image" accept="image/*" required>
@@ -26,7 +27,7 @@
   {% if resultat %}
   <div class="card">
     <h2>Résultat</h2>
-    <img class="video-frame" style="display:block; max-width:640px;" src="{{ url_for('static', filename=resultat.image_path) }}" alt="Résultat annoté">
+    <img class="video-frame" style="display:block; max-width:640px;" src="{{ url_for('voir_capture', filename=resultat.image_path) }}" alt="Résultat annoté">
     <p style="margin-top:1rem;">
       Statut :
       {% if resultat.statut == 'Chargé' %}<span class="badge badge-charge">Chargé</span>

@@ -6,22 +6,27 @@ SQLite avec export CSV.
 import csv
 import io
 import os
+import secrets
 import threading
 import time
 from functools import wraps
 
 import cv2
 import numpy as np
-from flask import Flask, Response, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, redirect, render_template, request, send_from_directory, session, url_for
 from werkzeug.security import check_password_hash
 
 import db
 from pipeline import annotate_frame, run_pipeline
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
+app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 Mo max par upload (/analyser)
 
-CAPTURES_DIR = os.path.join(app.static_folder, "captures")
+# Hors de static/ volontairement : static/ est servi sans authentification par
+# Flask, ce qui exposerait les photos de camions à quiconque devine un nom de
+# fichier. Voir la route protégée /captures/<filename> plus bas.
+CAPTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "captures")
 os.makedirs(CAPTURES_DIR, exist_ok=True)
 
 INFER_INTERVAL = 0.7  # secondes entre deux inférences YOLO sur le flux live
@@ -57,6 +62,27 @@ def login_required(view):
     return wrapped
 
 
+def get_csrf_token():
+    if "csrf_token" not in session:
+        session["csrf_token"] = secrets.token_hex(16)
+    return session["csrf_token"]
+
+
+app.jinja_env.globals["csrf_token"] = get_csrf_token
+
+
+@app.before_request
+def verifier_csrf():
+    if request.method == "POST":
+        token_session = session.get("csrf_token")
+        token_formulaire = request.form.get("csrf_token")
+        # Les deux doivent être présents ET identiques : si aucune session n'a
+        # encore émis de token, une requête forgée sans token ne doit pas
+        # passer simplement parce que les deux valeurs sont "None".
+        if not token_session or not token_formulaire or token_formulaire != token_session:
+            abort(403)
+
+
 def camera_worker():
     global latest_frame, latest_annotated_frame, latest_result, camera_ok
 
@@ -66,47 +92,56 @@ def camera_worker():
     last_portail_check = 0.0
 
     while True:
-        now = time.time()
+        try:
+            now = time.time()
 
-        if now - last_portail_check >= PORTAIL_POLL_INTERVAL:
-            last_portail_check = now
-            portail = db.get_portail_actif()
-            if portail and portail["id"] != current_portail_id:
-                if cap is not None:
-                    cap.release()
-                cap = cv2.VideoCapture(resolve_camera_source(portail["camera_source"]))
-                current_portail_id = portail["id"]
+            if now - last_portail_check >= PORTAIL_POLL_INTERVAL:
+                last_portail_check = now
+                portail = db.get_portail_actif()
+                if portail and portail["id"] != current_portail_id:
+                    if cap is not None:
+                        cap.release()
+                    cap = cv2.VideoCapture(resolve_camera_source(portail["camera_source"]))
+                    current_portail_id = portail["id"]
 
-        if cap is None:
-            time.sleep(0.5)
-            continue
+            if cap is None:
+                time.sleep(0.5)
+                continue
 
-        ret, frame = cap.read()
-        if not ret:
+            ret, frame = cap.read()
+            if not ret:
+                with state_lock:
+                    camera_ok = False
+                time.sleep(0.5)
+                continue
+
+            with state_lock:
+                camera_ok = True
+                result = latest_result
+
+            if now - last_infer >= INFER_INTERVAL:
+                p = get_current_params()
+                result = run_pipeline(
+                    frame,
+                    threshold=float(p["seuil_bleu"]),
+                    top_ratio=float(p["top_ratio"]),
+                    side_margin=float(p["side_margin"]),
+                )
+                last_infer = now
+
+            annotated = annotate_frame(frame.copy(), result)
+            with state_lock:
+                latest_frame = frame
+                latest_annotated_frame = annotated
+                latest_result = result
+        except Exception as exc:
+            # Le thread caméra tourne seul en tâche de fond : une exception non
+            # rattrapée ici (paramètre corrompu, erreur pilote caméra...) le
+            # tuerait silencieusement et figerait le flux en direct pour de bon.
+            print(f"[camera_worker] erreur ignorée : {exc}")
             with state_lock:
                 camera_ok = False
-            time.sleep(0.5)
-            continue
-
-        with state_lock:
-            camera_ok = True
-            result = latest_result
-
-        if now - last_infer >= INFER_INTERVAL:
-            p = get_current_params()
-            result = run_pipeline(
-                frame,
-                threshold=float(p["seuil_bleu"]),
-                top_ratio=float(p["top_ratio"]),
-                side_margin=float(p["side_margin"]),
-            )
-            last_infer = now
-
-        annotated = annotate_frame(frame.copy(), result)
-        with state_lock:
-            latest_frame = frame
-            latest_annotated_frame = annotated
-            latest_result = result
+            time.sleep(1.0)
 
 
 threading.Thread(target=camera_worker, daemon=True).start()
@@ -154,6 +189,12 @@ def video_feed():
     return Response(gen_mjpeg(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 
+@app.route("/captures/<path:filename>")
+@login_required
+def voir_capture(filename):
+    return send_from_directory(CAPTURES_DIR, filename)
+
+
 @app.route("/")
 @login_required
 def index():
@@ -188,7 +229,7 @@ def capturer():
         statut=statut,
         ratio_bleu=result.get("ratio_bleu", 0.0),
         confiance=result.get("confiance"),
-        image_path=f"captures/{filename}",
+        image_path=filename,
     )
 
     return redirect(url_for("index"))
@@ -231,14 +272,14 @@ def analyser():
                 statut=statut,
                 ratio_bleu=result.get("ratio_bleu", 0.0),
                 confiance=result.get("confiance"),
-                image_path=f"captures/{filename}",
+                image_path=filename,
             )
 
         resultat = {
             "statut": statut,
             "ratio_bleu": result.get("ratio_bleu", 0.0),
             "confiance": result.get("confiance"),
-            "image_path": f"captures/{filename}",
+            "image_path": filename,
         }
         return render_template("analyser.html", active="analyser", resultat=resultat, erreur=None)
 
@@ -301,7 +342,18 @@ def corriger(detection_id):
     nouveau_statut = request.form.get("statut")
     if nouveau_statut in ("Chargé", "Vide"):
         db.corriger_detection(detection_id, nouveau_statut)
-    return redirect(request.referrer or url_for("historique"))
+    return redirect(url_for("historique"))
+
+
+# Bornes de validation des paramètres réglables : reflète les min/max des
+# champs HTML, mais vérifiées côté serveur (le client peut envoyer n'importe
+# quoi). Une valeur hors bornes ou non numérique tuerait sinon silencieusement
+# le thread caméra à la prochaine inférence.
+BORNES_PARAMETRES = {
+    "seuil_bleu": (0.0, 1.0),
+    "top_ratio": (0.0, 0.9),
+    "side_margin": (0.0, 0.4),
+}
 
 
 @app.route("/parametres", methods=["GET", "POST"])
@@ -310,17 +362,34 @@ def parametres():
     global current_params
 
     if request.method == "POST":
-        for cle in ("seuil_bleu", "top_ratio", "side_margin"):
+        erreurs = []
+        for cle, (mini, maxi) in BORNES_PARAMETRES.items():
             valeur = request.form.get(cle)
-            if valeur:
-                db.set_parametre(cle, valeur)
+            if not valeur:
+                continue
+            try:
+                nombre = float(valeur)
+            except ValueError:
+                erreurs.append(f"{cle} : doit être un nombre.")
+                continue
+            if not (mini <= nombre <= maxi):
+                erreurs.append(f"{cle} : doit être entre {mini} et {maxi}.")
+                continue
+            db.set_parametre(cle, nombre)
+
         with params_lock:
             current_params = db.get_parametres()
+
+        if erreurs:
+            return render_template(
+                "parametres.html", params=get_current_params(), enregistre=None,
+                erreurs=erreurs, active="parametres",
+            )
         return redirect(url_for("parametres", enregistre="1"))
 
     return render_template(
         "parametres.html", params=get_current_params(), enregistre=request.args.get("enregistre"),
-        active="parametres",
+        erreurs=None, active="parametres",
     )
 
 
@@ -341,6 +410,31 @@ def portails():
         return redirect(url_for("portails"))
 
     return render_template("portails.html", portails=db.list_portails(), active="portails")
+
+
+@app.route("/compte", methods=["GET", "POST"])
+@login_required
+def compte():
+    erreur = None
+    succes = None
+
+    if request.method == "POST":
+        actuel = request.form.get("mot_de_passe_actuel", "")
+        nouveau = request.form.get("nouveau_mot_de_passe", "")
+        confirmation = request.form.get("confirmation", "")
+        utilisateur = db.get_utilisateur(session["utilisateur"])
+
+        if not check_password_hash(utilisateur["mot_de_passe_hash"], actuel):
+            erreur = "Mot de passe actuel incorrect."
+        elif len(nouveau) < 8:
+            erreur = "Le nouveau mot de passe doit faire au moins 8 caractères."
+        elif nouveau != confirmation:
+            erreur = "La confirmation ne correspond pas au nouveau mot de passe."
+        else:
+            db.set_mot_de_passe(session["utilisateur"], nouveau)
+            succes = "Mot de passe changé."
+
+    return render_template("compte.html", active="compte", erreur=erreur, succes=succes)
 
 
 if __name__ == "__main__":

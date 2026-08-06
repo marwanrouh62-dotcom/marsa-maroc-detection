@@ -28,6 +28,7 @@
       {% endif %}
 
       <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="field">
           <label for="identifiant">Identifiant</label>
           <input type="text" id="identifiant" name="identifiant" autocomplete="username" required>

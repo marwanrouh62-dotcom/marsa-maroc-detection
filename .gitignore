@@ -7,7 +7,7 @@ detection_output.jpg
 status_output.jpg
 test_images/result_*.jpg
 test_images/conditions/
-static/captures/
+captures/
 tools/
 yolov8n.pt
 .claude/

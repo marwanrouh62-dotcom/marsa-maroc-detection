@@ -22,6 +22,7 @@
           <td>
             {% if not p.actif %}
             <form method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <input type="hidden" name="action" value="activer">
               <input type="hidden" name="portail_id" value="{{ p.id }}">
               <button type="submit" class="btn btn-secondary btn-sm">Activer</button>
@@ -40,6 +41,7 @@
   <div class="card form-card">
     <h2>Ajouter un portail</h2>
     <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="ajouter">
       <div class="field">
         <label for="nom">Nom du portail</label>

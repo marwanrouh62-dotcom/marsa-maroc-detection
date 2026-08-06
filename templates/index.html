@@ -19,6 +19,7 @@
       <img src="{{ url_for('video_feed') }}" alt="Flux caméra en direct">
     </div>
     <form action="/capturer" method="post" style="margin-top:1.25rem;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary">Enregistrer la détection actuelle dans l'historique</button>
     </form>
     {% else %}

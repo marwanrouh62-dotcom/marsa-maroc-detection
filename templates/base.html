@@ -29,7 +29,8 @@
       <a href="/portails" class="{{ 'active' if active == 'portails' }}">Portails</a>
       <a href="/parametres" class="{{ 'active' if active == 'parametres' }}">Paramètres</a>
       {% if session.utilisateur %}
-      <a href="/logout" style="margin-left:0.75rem; border-left:1px solid rgba(255,255,255,0.15); padding-left:1rem;">{{ session.utilisateur }} — Déconnexion</a>
+      <a href="/compte" class="{{ 'active' if active == 'compte' }}" style="margin-left:0.75rem; border-left:1px solid rgba(255,255,255,0.15); padding-left:1rem;">{{ session.utilisateur }}</a>
+      <a href="/logout">Déconnexion</a>
       {% endif %}
     </div>
   </nav>
