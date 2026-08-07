@@ -5,7 +5,8 @@
 100% Python, exécution locale.
 
 - **Détection camion** : YOLOv8n pré-entraîné (COCO, `yolov8n.pt`), classes retenues : `truck` (7), `bus` (5).
-- **Détection bâche** : extraction d'une ROI dans la bbox du camion, conversion HSV, seuillage sur la teinte bleue.
+- **Détection de la caisse** : modèle YOLOv8n fine-tuné maison (`dataset_cabine_caisse/`, classes `cabine`/`caisse`) si disponible et confiant, sinon repli sur une heuristique géométrique (ROI calculée à partir de la bbox du camion). Voir §3quater.
+- **Détection bâche** : conversion HSV de la ROI (issue du modèle ou de l'heuristique), seuillage sur la teinte bleue.
 - **Backend** : Flask (serveur de dev), flux vidéo en MJPEG.
 - **Stockage** : SQLite (`marsa_maroc.db`).
 - **Frontend** : Flask + Jinja2 (pas de framework JS).
@@ -24,6 +25,7 @@
 | `templates/` | Pages Jinja2 (`base.html`, `index.html`, `analyser.html`, `historique.html`, `parametres.html`, `portails.html`, `compte.html`, `login.html`). |
 | `static/css/style.css` | Feuille de style unique partagée par toutes les pages. |
 | `test_images/` | Photos de test réelles + variantes générées, utilisées pour valider le pipeline. |
+| `dataset_cabine_caisse/` | Jeu de données + scripts d'entraînement du modèle fine-tuné cabine/caisse (voir §3quater). |
 | `captures/` | Images annotées enregistrées via "Enregistrer" ou "Analyser une photo". **Hors de `static/`** volontairement (voir §3ter) — servi par une route protégée. |
 | `RAPPORT_TESTS.md` | Rapport de tests consolidé (détection, HSV, robustesse, fonctionnel, sécurité). |
 
@@ -55,6 +57,45 @@ Un audit du projet (2026-08-06) a identifié et corrigé plusieurs points :
 
 Non traité (accepté comme limite, cf. §8) : pas de limitation du nombre de tentatives sur `/login` (brute-force), pas de nettoyage automatique de `captures/`.
 
+## 3quater. Modèle fine-tuné cabine/caisse (expérimental)
+
+⚠️ Ce composant sort du périmètre initial du cahier des charges ("approche sans dataset"). Ajouté le 2026-08-07 après que l'heuristique géométrique (calibrage par marges gauche/droite) se soit révélée incapable de généraliser à des angles de caméra très différents sans recalibrage manuel à chaque fois (voir `RAPPORT_TESTS.md` §7.4 et §9).
+
+### Pourquoi
+
+Une approche purement géométrique/couleur (ROI positionnée par des fractions fixes de la bbox) suppose de savoir où se trouve la cabine par rapport à la caisse — vrai seulement pour UN angle de caméra donné, à calibrer sur site. Testé et rejeté avant ça : chercher simplement "le plus gros bloc de pixels bleus connectés" dans toute la bbox, sans a priori de position — **ne fonctionne pas**, une cabine peinte en bleu forme un bloc tout aussi gros et solide qu'une vraie bâche (`RAPPORT_TESTS.md` §9). Sans distinguer "cabine" de "caisse" par autre chose que leur position supposée, il n'y a pas de solution générale.
+
+### Ce qui a été construit
+
+- **`dataset_cabine_caisse/preparer_dataset.py`** : convertit des annotations manuelles (bboxes cabine/caisse, en pixels) en labels YOLO, à partir des 7 photos réelles de `test_images/`. 5 en train, 2 en "val" (jeu minuscule, la val n'est pas indépendante du train vu le nombre d'images).
+- **`dataset_cabine_caisse/entrainer.py`** : fine-tune `yolov8n.pt` sur ces 2 classes (`cabine`, `caisse`), 60 epochs, ~5-6 min sur CPU. Produit `entrainement/weights/best.pt` (~6 Mo).
+- **`dataset_cabine_caisse/evaluer.py`** : fait tourner le pipeline complet sur les 6 photos de référence et rapporte source de ROI (modèle ou heuristique) + statut.
+- **Intégration dans `pipeline.py`** : `detect_caisse_bbox()` interroge le modèle fine-tuné s'il existe (`CABINE_CAISSE_MODEL_PATH`) ; si une détection "caisse" dépasse `CAISSE_CONF_THRESHOLD` (0.25), sa bbox sert **directement** de ROI (pas de calibrage `top_ratio`/`left_margin`/`right_margin` nécessaire). Sinon, repli automatique et transparent sur `extract_benne_roi()` (l'heuristique géométrique existante). Le champ `roi_source` du résultat (`"modele"` ou `"heuristique"`) indique laquelle a été utilisée.
+
+### État réel de fiabilité (à ne pas survendre)
+
+Sur les 6 photos de référence (dont 4 ont servi à l'entraînement — pas une évaluation indépendante) :
+
+| Photo | Source ROI utilisée | Résultat |
+|---|---|---|
+| camion_bache_1 | heuristique (modèle pas assez confiant) | correct |
+| camion_bache_2 | **modèle** | correct |
+| camion_benne_bache_haut | **modèle** | correct |
+| conteneur_sans_bache | heuristique | correct |
+| cabine_bleue_sans_bache | heuristique | correct |
+| camion vue 3/4 (le cas qui a motivé ce travail) | heuristique (modèle détecte la bonne zone mais sous le seuil de confiance, 0.125 au lieu de 0.25) | **incorrect** |
+
+Le modèle détecte parfois la caisse avec une bbox très proche de l'annotation manuelle (vérifié visuellement), mais sa confiance n'est pas assez fiable pour baisser le seuil sans risque : testé à `CAISSE_CONF_THRESHOLD=0.10`, le cas 3/4 se corrige mais **2 autres photos, correctes avant, deviennent fausses** (le modèle prédit alors une bbox légèrement décalée qui inclut un bout de cabine ou rate le haut de la bâche). Avec 5 images d'entraînement, baisser le seuil ne fait que déplacer l'erreur, pas la résoudre.
+
+**Conclusion honnête** : le mécanisme (annotation → entraînement → intégration avec repli automatique) fonctionne de bout en bout et améliore déjà 2 cas sur 6. Le modèle lui-même n'est pas encore assez fiable pour remplacer l'heuristique par défaut — il ne fait que la compléter quand il est confiant. Pour une vraie fiabilité, il faut **beaucoup plus de photos annotées** (au minimum quelques dizaines par classe, idéalement plusieurs centaines, et si possible depuis la caméra réelle du portail une fois installée) puis ré-entraîner avec `entrainer.py`.
+
+### Pour ré-entraîner avec plus de données
+
+1. Ajouter des photos dans `test_images/` (ou un autre dossier).
+2. Ajouter leurs annotations dans `ANNOTATIONS` (`preparer_dataset.py`) — ou migrer vers un outil d'annotation dédié (LabelImg, CVAT, Roboflow...) une fois le volume plus important.
+3. Relancer `preparer_dataset.py` puis `entrainer.py`.
+4. Vérifier avec `evaluer.py` avant de considérer le nouveau modèle fiable.
+
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 
 1. `detect_truck_bbox()` : inférence YOLOv8n, garde la détection `truck`/`bus` la plus confiante (seuil de confiance 0.4).
@@ -80,6 +121,7 @@ Une cabine peinte en bleu (sans bâche) peut faire remonter le % de bleu mesuré
 - Une **cabine peinte en bleu** peut être confondue avec une bâche si elle occupe une grande partie de la ROI — atténué par le seuil à 0.35 par défaut, et corrigeable précisément via `left_margin`/`right_margin` une fois qu'on connaît la position de la cabine pour la caméra installée. Pas de solution universelle sans calibrage (pas de segmentation cabine/caisse sans dataset custom).
 - La ROI rectangulaire axis-aligned perd en précision sur des rotations extrêmes de la caméra (±12° testé) — un cas limite documenté dans `RAPPORT_TESTS.md` §7.3.
 - Les paramètres par défaut (`top_ratio`, `left_margin`, `right_margin`) sont calibrés pour une **vue de côté** (les 5 photos de test principales). Une caméra de portail avec un angle très différent (face, 3/4, plongée...) nécessite un recalibrage dédié — voir `RAPPORT_TESTS.md` §7.4 pour un exemple concret.
+- Le modèle fine-tuné cabine/caisse (§3quater) réduit ce besoin de calibrage manuel quand il est confiant, mais reste entraîné sur seulement 5 images — pas fiable pour remplacer entièrement l'heuristique tant qu'un jeu de données plus large n'est pas disponible.
 
 ## 6. Tests effectués
 

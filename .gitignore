@@ -11,3 +11,13 @@ captures/
 tools/
 yolov8n.pt
 .claude/
+dataset_cabine_caisse/entrainement/weights/last.pt
+dataset_cabine_caisse/entrainement/*.jpg
+dataset_cabine_caisse/entrainement/*_curve.png
+dataset_cabine_caisse/entrainement/confusion_matrix*.png
+dataset_cabine_caisse/entrainement/results.csv
+dataset_cabine_caisse/entrainement/args.yaml
+dataset_cabine_caisse/eval_*.jpg
+dataset_cabine_caisse/eval_*.png
+dataset_cabine_caisse/verif_*.jpg
+dataset_cabine_caisse/labels/*.cache

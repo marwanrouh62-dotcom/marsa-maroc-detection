@@ -144,10 +144,55 @@ Avec la ROI haute par défaut (`left_margin=right_margin=0.05`) : 62.1% de bleu 
 
 **Point important** : cette photo 3/4 n'est **pas** ajoutée à la suite de robustesse automatique (`test_conditions.py`), qui suppose des paramètres par défaut valables pour une vue de côté. Elle illustre plutôt l'usage du calibrage `left_margin`/`right_margin` pour un angle de caméra différent — à faire une fois sur site selon l'angle réel du portail, pas un réglage universel qui marcherait pour toutes les vues à la fois.
 
-## 8. Limites connues (non-bugs, limites d'approche)
+## 9. Modèle fine-tuné cabine/caisse — tentative de détection indépendante de l'angle (2026-08-07)
+
+Demande explicite : détecter la caisse/bâche correctement **quel que soit l'angle de caméra**, sans recalibrage manuel par site. Deux approches testées.
+
+### 9.1 Résultat négatif : plus gros bloc de pixels bleus connectés (sans a priori de position)
+
+Hypothèse testée : au lieu d'une ROI positionnée par des fractions de la bbox, chercher directement le plus gros bloc de pixels bleus connectés (`cv2.connectedComponentsWithStats`) dans toute la bbox du camion — une vraie bâche devrait former un bloc plus gros/solide qu'une cabine peinte.
+
+| Photo | Attendu | Plus gros bloc bleu connecté (% de la bbox) |
+|---|---|---|
+| Camion benne bâché (haut) | Chargé | 20.2% |
+| Cabine bleue sans bâche | **Vide** | **24.4%** |
+| Camion vue 3/4 sans bâche | **Vide** | **57.5%** |
+| Camion bâché 1 | Chargé | 51.9% |
+
+**Rejeté** : aucun seuil ne sépare ces cas (les "Vide" dépassent les "Chargé"). Une cabine peinte en bleu forme un bloc connecté tout aussi gros et solide qu'une vraie bâche — la couleur et la connectivité seules ne suffisent pas à les distinguer, quel que soit l'angle.
+
+### 9.2 Modèle YOLOv8 fine-tuné (cabine/caisse), jeu de données jouet
+
+Seule approche qui fonctionne en principe : un modèle entraîné à reconnaître "cabine" et "caisse" comme deux concepts visuels distincts (pas juste une position supposée). Sort du périmètre "sans dataset" du cahier des charges — accepté explicitement pour cette itération.
+
+**Annotation** : bboxes cabine/caisse déterminées manuellement sur les 7 photos réelles disponibles (`dataset_cabine_caisse/preparer_dataset.py`), vérifiées visuellement avant entraînement (superposition des boîtes sur les images — correspondance correcte, y compris avec le contour de référence fourni par l'utilisateur sur la photo 3/4).
+
+**Entraînement** : `yolov8n.pt` fine-tuné 60 epochs, 5 images train / 2 val (`dataset_cabine_caisse/entrainer.py`). Métriques finales sur la val (2 images seulement, peu significatif statistiquement) : précision 0.93, rappel 0.25, mAP50 0.51.
+
+**Intégration** : `pipeline.detect_caisse_bbox()` — si le modèle détecte "caisse" avec confiance ≥ 0.25, sa bbox sert directement de ROI ; sinon repli automatique sur l'heuristique géométrique existante (§4). Aucune régression sur le comportement par défaut si le modèle n'existe pas (chemin de fichier absent → détecté une fois, mis en cache).
+
+**Résultat sur les 6 photos de référence** (⚠️ 4 ont servi à l'entraînement — pas une évaluation indépendante) :
+
+| Photo | Source ROI | Résultat |
+|---|---|---|
+| camion_bache_1 | heuristique (modèle sous le seuil) | Chargé ✅ |
+| camion_bache_2 | **modèle** | Chargé ✅ |
+| camion_benne_bache_haut | **modèle** | Chargé ✅ |
+| conteneur_sans_bache | heuristique | Vide ✅ |
+| cabine_bleue_sans_bache | heuristique | Vide ✅ |
+| camion vue 3/4 (cas motivant) | heuristique (modèle détecte la bonne zone mais à conf=0.125, sous le seuil 0.25) | Chargé ❌ |
+
+**5/6 correct** — 2 cas résolus directement par le modèle (avant : résolus par calibrage manuel de `left_margin`/`right_margin`, non généralisable). Le cas 3/4 qui a motivé ce travail reste incorrect par défaut : le modèle trouve la bonne bbox (quasi identique à l'annotation manuelle, vérifié) mais sa confiance (0.125) est trop basse pour être retenue en toute sécurité.
+
+**Testé et rejeté** : baisser `CAISSE_CONF_THRESHOLD` à 0.10 pour rattraper ce cas — corrige bien la photo 3/4, mais casse 2 photos qui fonctionnaient auparavant (le modèle prédit alors, sur ces 2 images, une bbox légèrement décalée qui inclut un bout de cabine ou rate une partie de la bâche). Avec seulement 5 images d'entraînement, baisser le seuil déplace l'erreur au lieu de la résoudre — la confiance du modèle n'est pas encore calibrée de façon fiable. Seuil laissé à 0.25.
+
+**Conclusion** : le mécanisme (annotation → entraînement → intégration avec repli automatique) est validé de bout en bout et apporte un gain mesurable (2/6 cas). Le modèle lui-même nécessite beaucoup plus de données annotées (quelques dizaines à quelques centaines d'images, idéalement de la caméra réelle du portail) avant d'être fiable comme détecteur principal. Voir `MANUEL_TECHNIQUE.md` §3quater pour la procédure de ré-entraînement.
+
+## 10. Limites connues (non-bugs, limites d'approche)
 
 - La règle de décision ne détecte que la couleur bleue — un camion chargé sans bâche bleue (ex. conteneur) est classé "Vide". Comportement volontaire du cahier des charges (approche sans dataset).
-- La ROI "bâche" est une heuristique géométrique (haut de la bounding box, rectangle axis-aligned), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site. Elle perd en précision sur les rotations extrêmes (voir §7.3) et ne distingue pas la cabine de la caisse par position (seule la couleur mesurée en résulte, compensée par le seuil — voir §7.2 — ou par un calibrage asymétrique `left_margin`/`right_margin` — voir §7.4).
-- Une cabine peinte en bleu reste un facteur de risque de faux positif si elle occupe une grande partie de la ROI — atténué par le seuil à 0.35 par défaut, corrigeable précisément par calibrage `left_margin`/`right_margin` une fois l'angle de caméra du portail connu.
+- La ROI "bâche" par défaut est une heuristique géométrique (haut de la bounding box, rectangle axis-aligned), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site. Elle perd en précision sur les rotations extrêmes (voir §7.3) et ne distingue pas la cabine de la caisse par position (seule la couleur mesurée en résulte, compensée par le seuil — voir §7.2 — ou par un calibrage asymétrique `left_margin`/`right_margin` — voir §7.4).
+- Une cabine peinte en bleu reste un facteur de risque de faux positif si elle occupe une grande partie de la ROI — atténué par le seuil à 0.35 par défaut, corrigeable précisément par calibrage `left_margin`/`right_margin` une fois l'angle de caméra du portail connu, ou par le modèle fine-tuné (§9) quand il est confiant.
 - Les valeurs par défaut (`top_ratio=0.45`, `left_margin=right_margin=0.05`) sont calibrées pour une vue de côté (les 5 photos de test principales) — un angle de caméra très différent (face, 3/4, plongée) nécessite un recalibrage dédié, comme démontré en §7.4.
-- Tests de robustesse basés sur 5 photos réelles (vue de côté) + variantes simulées, plus 1 photo réelle supplémentaire (vue 3/4) validant le calibrage asymétrique — pas de flux vidéo réel du portail Marsa Maroc (caméra non encore installée à ce stade du projet).
+- Le modèle fine-tuné cabine/caisse (§9) n'est pas encore assez fiable pour remplacer l'heuristique par défaut — 5 images d'entraînement est très insuffisant pour un modèle de production. Il complète l'heuristique quand il est confiant, sans jamais la dégrader (repli automatique).
+- Tests de robustesse basés sur 5 photos réelles (vue de côté) + variantes simulées, plus 2 photos réelles supplémentaires (vue 3/4, cabine bleue) validant le calibrage asymétrique et le modèle fine-tuné — pas de flux vidéo réel du portail Marsa Maroc (caméra non encore installée à ce stade du projet).
