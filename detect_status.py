@@ -6,7 +6,7 @@ Usage:
     python detect_status.py                     # capture depuis la webcam
     python detect_status.py --image path.jpg
     python detect_status.py --video path.mp4
-    python detect_status.py --image path.jpg --threshold 0.25 --top-ratio 0.3
+    python detect_status.py --image path.jpg --threshold 0.35 --left-margin 0.65
 """
 import argparse
 import sys
@@ -40,11 +40,15 @@ def main():
     parser.add_argument("--video", help="Chemin vers une vidéo de test")
     parser.add_argument("--threshold", type=float, default=0.35, help="Seuil % pixels bleus")
     parser.add_argument("--top-ratio", type=float, default=0.45, help="Fraction de hauteur (bâche) analysée depuis le haut")
-    parser.add_argument("--side-margin", type=float, default=0.05, help="Marge latérale rognée de la ROI")
+    parser.add_argument("--left-margin", type=float, default=0.05, help="Marge rognée à gauche de la ROI")
+    parser.add_argument("--right-margin", type=float, default=0.05, help="Marge rognée à droite de la ROI")
     args = parser.parse_args()
 
     frame = grab_frame(args.image, args.video)
-    result = run_pipeline(frame, threshold=args.threshold, top_ratio=args.top_ratio, side_margin=args.side_margin)
+    result = run_pipeline(
+        frame, threshold=args.threshold, top_ratio=args.top_ratio,
+        left_margin=args.left_margin, right_margin=args.right_margin,
+    )
 
     if not result["camion_detecte"]:
         print("Aucun camion détecté.")

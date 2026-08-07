@@ -25,15 +25,21 @@
       </div>
 
       <div class="field">
-        <label for="top_ratio">Fraction haute de la bbox exclue (cabine)</label>
+        <label for="top_ratio">Fraction de hauteur analysée depuis le haut (bâche)</label>
         <input type="number" step="0.01" min="0" max="0.9" id="top_ratio" name="top_ratio" value="{{ params.top_ratio }}">
-        <span class="hint">Part du camion en partant du haut considérée comme cabine, non analysée</span>
+        <span class="hint">Sur une vue de côté, la bâche est en haut de la caisse — hauteur de bande analysée à partir du haut du camion</span>
       </div>
 
       <div class="field">
-        <label for="side_margin">Marge latérale rognée de la ROI</label>
-        <input type="number" step="0.01" min="0" max="0.4" id="side_margin" name="side_margin" value="{{ params.side_margin }}">
-        <span class="hint">Bords gauche/droite retirés de la zone benne analysée</span>
+        <label for="left_margin">Marge rognée à gauche</label>
+        <input type="number" step="0.01" min="0" max="0.85" id="left_margin" name="left_margin" value="{{ params.left_margin }}">
+        <span class="hint">Augmenter fortement (ex. 0.6+) si la cabine est du côté gauche de l'image (vue de face/3-4)</span>
+      </div>
+
+      <div class="field">
+        <label for="right_margin">Marge rognée à droite</label>
+        <input type="number" step="0.01" min="0" max="0.85" id="right_margin" name="right_margin" value="{{ params.right_margin }}">
+        <span class="hint">Augmenter fortement si la cabine est du côté droit de l'image</span>
       </div>
 
       <div class="field">

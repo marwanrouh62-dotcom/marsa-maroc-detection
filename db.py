@@ -50,8 +50,9 @@ PORTAILS_INITIAUX = {
 # Seuils/paramètres de détection réglables depuis l'interface (Jour 5).
 PARAMETRES_INITIAUX = {
     "seuil_bleu": "0.35",
-    "top_ratio": "0.35",
-    "side_margin": "0.05",
+    "top_ratio": "0.45",
+    "left_margin": "0.05",
+    "right_margin": "0.05",
 }
 
 # Compte admin créé au premier démarrage si aucun utilisateur n'existe.
@@ -67,6 +68,18 @@ def _migrer_colonnes_detections(conn):
         conn.execute("ALTER TABLE detections ADD COLUMN corrige INTEGER NOT NULL DEFAULT 0")
 
 
+def _migrer_side_margin(conn):
+    """side_margin (marge symétrique) remplacé par left_margin/right_margin
+    (marges indépendantes, nécessaires pour exclure une cabine qui occupe
+    tout un côté de la bbox sur une vue de face/3-4)."""
+    row = conn.execute("SELECT valeur FROM parametres WHERE cle = 'side_margin'").fetchone()
+    if row is None:
+        return
+    for cle in ("left_margin", "right_margin"):
+        conn.execute("INSERT OR IGNORE INTO parametres (cle, valeur) VALUES (?, ?)", (cle, row["valeur"]))
+    conn.execute("DELETE FROM parametres WHERE cle = 'side_margin'")
+
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -77,6 +90,7 @@ def init_db():
     conn = get_connection()
     conn.executescript(SCHEMA)
     _migrer_colonnes_detections(conn)
+    _migrer_side_margin(conn)
     for nom, camera_source in PORTAILS_INITIAUX.items():
         conn.execute(
             "INSERT OR IGNORE INTO portails (nom, camera_source) VALUES (?, ?)",

@@ -55,8 +55,10 @@ Accessible via le menu **Portails**.
 
 Accessible via le menu **Paramètres**.
 
-- **Seuil de décision** : pourcentage de pixels bleus au-delà duquel un camion est considéré "Chargé" (par défaut 30%). À augmenter si le système déclare "Chargé" trop souvent à tort ; à diminuer s'il déclare "Vide" trop souvent à tort.
-- **Fraction haute exclue (cabine)** et **marge latérale** : ajustent la zone de l'image analysée (la "benne") par rapport à la cabine et aux bords du camion. À recalibrer si la caméra du portail est positionnée différemment du cas de test (angle, distance).
+- **Seuil de décision** : pourcentage de pixels bleus au-delà duquel un camion est considéré "Chargé" (par défaut 35%). À augmenter si le système déclare "Chargé" trop souvent à tort ; à diminuer s'il déclare "Vide" trop souvent à tort.
+- **Fraction de hauteur analysée depuis le haut** : sur une vue de côté, la bâche est en haut de la caisse — ajuste la hauteur de la bande analysée à partir du haut du camion.
+- **Marge rognée à gauche** / **Marge rognée à droite** : réglages **indépendants**, à utiliser si la cabine du camion apparaît d'un côté de l'image (caméra positionnée de face ou en 3/4 plutôt que de côté). Augmenter fortement la marge du côté où se trouve la cabine (ex. 0.6 ou plus) pour l'exclure de la zone analysée, tout en gardant l'autre côté (la caisse) intact.
+- À recalibrer une fois la caméra du portail installée : les valeurs par défaut correspondent à une vue de côté classique, pas à tous les angles possibles.
 - Les valeurs sont vérifiées avant d'être enregistrées (un message d'erreur s'affiche si une valeur est hors limites ou non numérique).
 
 Les changements sont appliqués immédiatement au flux en direct, sans redémarrage.

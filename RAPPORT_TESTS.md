@@ -128,9 +128,26 @@ Testé sur une photo réelle (tracteur à cabine bleu métallisé + remorque rid
 
 **Diagnostic** : à forte rotation, la bounding box (toujours axis-aligned) s'agrandit pour englober le camion incliné, ce qui déplace la position relative de la bâche à l'intérieur de la bbox — la tranche "haut" fixe (`top_ratio`) capture alors proportionnellement plus de cabine/arrière-plan et moins de bâche. C'est une limite géométrique de l'heuristique (ROI rectangulaire non adaptative à la rotation), pas un problème de couleur/seuil. Non corrigé volontairement : baisser le seuil pour rattraper ce cas isolé réduirait la marge de sécurité contre le faux positif de cabine bleue (§7.2), qui est un risque plus réaliste en usage normal (caméra de portail fixe, angle stable) qu'une rotation de ±12°.
 
+### 7.4 Vue de face/3-4 : la cabine occupe tout un côté de la bbox, pas juste un bord
+
+Signalé avec une photo réelle supplémentaire (camion vu de face/3-4, cabine bleue à gauche, caisse blanche sans bâche à droite — contour attendu fourni par l'utilisateur pour indiquer la caisse seule).
+
+Avec la ROI haute par défaut (`left_margin=right_margin=0.05`) : 62.1% de bleu → **Chargé** ❌ (faux positif). Sur cet angle de caméra, la cabine occupe non pas un bord mais **plus de la moitié de la largeur de la bbox** — une marge symétrique de 5% de chaque côté ne l'exclut presque pas.
+
+**Diagnostic** : ce n'est pas le même problème qu'en §7.2 (cabine qui teinte légèrement une ROI côté-caméra) — ici la cabine EST la majorité du haut de l'image sur cet angle de prise de vue. Aucun réglage symétrique ne peut à la fois exclure une cabine qui occupe 55% de la largeur et garder la caisse qui occupe les 45% restants.
+
+**Correctif structurel** : `side_margin` (marge symétrique unique) remplacé par `left_margin`/`right_margin` (indépendants) dans `tarp_analysis.extract_benne_roi()`, `pipeline.run_pipeline()`, la base de données (migration automatique de l'ancienne valeur), l'interface `/parametres` et le CLI `detect_status.py`.
+
+**Vérification** : avec `left_margin=0.68, right_margin=0.03` (calibré pour cette caméra précise, cabine à gauche) → ROI resserrée sur la caisse blanche seule, 8.5% de bleu → **Vide** ✅. Confirmé visuellement : le rectangle de ROI obtenu correspond de très près au contour de la caisse fourni par l'utilisateur sur la photo de référence.
+
+**Non-régression** : les 5 photos de test principales (vue de côté) re-testées avec les valeurs par défaut inchangées (`left_margin=right_margin=0.05`) donnent des résultats identiques au bit près à ceux du §7.3 (39/40, même cas limite documenté) — le renommage/la refonte du paramètre n'a rien changé pour le calibrage par défaut.
+
+**Point important** : cette photo 3/4 n'est **pas** ajoutée à la suite de robustesse automatique (`test_conditions.py`), qui suppose des paramètres par défaut valables pour une vue de côté. Elle illustre plutôt l'usage du calibrage `left_margin`/`right_margin` pour un angle de caméra différent — à faire une fois sur site selon l'angle réel du portail, pas un réglage universel qui marcherait pour toutes les vues à la fois.
+
 ## 8. Limites connues (non-bugs, limites d'approche)
 
 - La règle de décision ne détecte que la couleur bleue — un camion chargé sans bâche bleue (ex. conteneur) est classé "Vide". Comportement volontaire du cahier des charges (approche sans dataset).
-- La ROI "bâche" est une heuristique géométrique (haut de la bounding box, rectangle axis-aligned), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site. Elle perd en précision sur les rotations extrêmes (voir §7.3) et ne distingue pas la cabine de la caisse par position (seule la couleur mesurée en résulte, compensée par le seuil — voir §7.2).
-- Une cabine peinte en bleu reste un facteur de risque de faux positif si elle occupe une grande partie du haut de la bbox (camions courts, cabine large) — atténué mais pas éliminé par le seuil à 0.35.
-- Tests de robustesse basés sur 5 photos réelles + variantes simulées, pas sur un flux vidéo réel du portail Marsa Maroc (caméra non encore installée à ce stade du projet).
+- La ROI "bâche" est une heuristique géométrique (haut de la bounding box, rectangle axis-aligned), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site. Elle perd en précision sur les rotations extrêmes (voir §7.3) et ne distingue pas la cabine de la caisse par position (seule la couleur mesurée en résulte, compensée par le seuil — voir §7.2 — ou par un calibrage asymétrique `left_margin`/`right_margin` — voir §7.4).
+- Une cabine peinte en bleu reste un facteur de risque de faux positif si elle occupe une grande partie de la ROI — atténué par le seuil à 0.35 par défaut, corrigeable précisément par calibrage `left_margin`/`right_margin` une fois l'angle de caméra du portail connu.
+- Les valeurs par défaut (`top_ratio=0.45`, `left_margin=right_margin=0.05`) sont calibrées pour une vue de côté (les 5 photos de test principales) — un angle de caméra très différent (face, 3/4, plongée) nécessite un recalibrage dédié, comme démontré en §7.4.
+- Tests de robustesse basés sur 5 photos réelles (vue de côté) + variantes simulées, plus 1 photo réelle supplémentaire (vue 3/4) validant le calibrage asymétrique — pas de flux vidéo réel du portail Marsa Maroc (caméra non encore installée à ce stade du projet).

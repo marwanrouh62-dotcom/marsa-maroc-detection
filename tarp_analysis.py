@@ -17,24 +17,31 @@ BLUE_HSV_UPPER = (130, 255, 255)
 BLUE_RATIO_THRESHOLD = 0.35
 
 
-def extract_benne_roi(frame, bbox, top_ratio=0.45, side_margin=0.05, top_margin=0.05):
+def extract_benne_roi(frame, bbox, top_ratio=0.45, left_margin=0.05, right_margin=0.05, top_margin=0.05):
     """
     Approxime la zone de la bâche à partir de la bounding box du camion.
 
-    Hypothèse (à calibrer sur site selon l'angle de la caméra du portail) :
-    sur un camion benne bâché, la bâche forme un bombé au-dessus de la caisse,
-    dans la partie HAUTE du camion (au-dessus des parois métalliques et du
-    châssis/roues qui occupent le bas). `top_margin` exclut une fine bande
-    tout en haut (ciel, antenne...), `top_ratio` définit la fraction de
-    hauteur analysée à partir de là, `side_margin` rogne les bords latéraux.
+    Hypothèse par défaut (vue de côté, à calibrer sur site selon l'angle
+    réel de la caméra du portail) : sur un camion benne bâché, la bâche
+    forme un bombé au-dessus de la caisse, dans la partie HAUTE du camion
+    (au-dessus des parois métalliques et du châssis/roues qui occupent le
+    bas). `top_margin` exclut une fine bande tout en haut (ciel, antenne...),
+    `top_ratio` définit la fraction de hauteur analysée à partir de là.
+
+    `left_margin`/`right_margin` sont volontairement indépendants (pas une
+    seule marge symétrique) : sur une caméra fixe qui voit le camion de
+    face/3-4, la cabine occupe un côté entier de la bbox (pas juste un
+    petit bord) et doit être exclue via une grande marge de CE côté (ex.
+    left_margin=0.65 si la cabine est à gauche), tout en gardant l'autre
+    côté (la caisse/le conteneur) presque intact.
     """
     x1, y1, x2, y2 = bbox
     h = y2 - y1
     w = x2 - x1
     roi_y1 = y1 + int(h * top_margin)
     roi_y2 = y1 + int(h * (top_margin + top_ratio))
-    roi_x1 = x1 + int(w * side_margin)
-    roi_x2 = x2 - int(w * side_margin)
+    roi_x1 = x1 + int(w * left_margin)
+    roi_x2 = x2 - int(w * right_margin)
     roi_box = (roi_x1, roi_y1, roi_x2, roi_y2)
     return frame[roi_y1:roi_y2, roi_x1:roi_x2], roi_box
 

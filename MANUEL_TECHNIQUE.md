@@ -31,7 +31,7 @@
 
 - **`portails`** : `id`, `nom`, `camera_source` (index webcam ou URL RTSP), `actif`. Portail initial : "Terminal Polyvalent" (`camera_source = "0"`). Un seul portail `actif=1` à la fois (`db.set_portail_actif()` désactive les autres).
 - **`detections`** : `id`, `portail_id`, `statut`, `ratio_bleu`, `confiance`, `image_path`, `horodatage`, `statut_original`, `corrige`.
-- **`parametres`** : `cle`/`valeur` — `seuil_bleu` (défaut 0.30), `top_ratio` (défaut 0.35), `side_margin` (défaut 0.05).
+- **`parametres`** : `cle`/`valeur` — `seuil_bleu` (défaut 0.35), `top_ratio` (défaut 0.45), `left_margin` (défaut 0.05), `right_margin` (défaut 0.05). Migration automatique depuis l'ancien `side_margin` (marge symétrique unique) si présent — voir `db._migrer_side_margin()`.
 - **`utilisateurs`** : `id`, `identifiant`, `mot_de_passe_hash` (Werkzeug `generate_password_hash`). Compte `admin`/`admin123` créé automatiquement si la table est vide au premier démarrage. Changeable via `/compte` (appelle `db.set_mot_de_passe()`).
 
 `db.init_db()` crée le schéma et migre automatiquement les colonnes manquantes sur une base existante (`ALTER TABLE`).
@@ -58,7 +58,11 @@ Non traité (accepté comme limite, cf. §8) : pas de limitation du nombre de te
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 
 1. `detect_truck_bbox()` : inférence YOLOv8n, garde la détection `truck`/`bus` la plus confiante (seuil de confiance 0.4).
-2. `extract_benne_roi()` : approxime la zone de la **bâche** comme la partie **haute** de la bbox (sous une fine marge `top_margin=0.05` en haut, sur une hauteur `top_ratio=0.45`), bords rognés via `side_margin`. **Heuristique non calibrée sur un vrai portail** — à ajuster selon l'angle de caméra réel (paramètres réglables en interface). Historique : la ROI ciblait initialement le **bas** de la bbox (hypothèse "cabine en haut, benne en bas") ; inversée le 2026-08-07 après qu'une photo réelle de camion benne bâchée (bâche bombée au-dessus de la caisse) ait révélé que la ROI basse ratait la bâche (voir `RAPPORT_TESTS.md` §7.1).
+2. `extract_benne_roi()` : approxime la zone de la **bâche/caisse** à partir de la bbox du camion :
+   - verticalement, cible la partie **haute** (`top_margin=0.05` exclut une fine bande tout en haut, `top_ratio=0.45` définit la hauteur analysée à partir de là) ;
+   - horizontalement, `left_margin`/`right_margin` (indépendants, pas une marge symétrique) rognent chaque côté séparément — nécessaire pour exclure une cabine qui occupe tout un côté de la bbox sur une vue de face/3-4 (voir `RAPPORT_TESTS.md` §7.4).
+
+   **Heuristique non calibrée sur un vrai portail** — à ajuster selon l'angle de caméra réel (paramètres réglables en interface). Historique : la ROI ciblait initialement le **bas** de la bbox avec une marge latérale symétrique (hypothèse "cabine en haut, benne en bas") ; inversée verticalement le 2026-08-07 après qu'une photo réelle de camion benne bâchée (bâche bombée au-dessus de la caisse) ait révélé que la ROI basse ratait la bâche (`RAPPORT_TESTS.md` §7.1), puis rendue asymétrique horizontalement le même jour après qu'une photo réelle de camion vu de face/3-4 (cabine occupant plus de la moitié de la bbox) ait révélé qu'une marge symétrique ne peut pas exclure une cabine aussi large (`RAPPORT_TESTS.md` §7.4).
 3. `blue_pixel_ratio()` : conversion BGR→HSV, `cv2.inRange` avec `BLUE_HSV_LOWER=(90,60,15)` / `BLUE_HSV_UPPER=(130,255,255)`.
 4. `decide_status()` : `ratio >= seuil_bleu` (0.35 par défaut) → "Chargé", sinon "Vide".
 
@@ -68,13 +72,14 @@ Testé en Jour 6 : un seuil V trop élevé (40) fait passer les vrais camions b�
 
 ### Choix du seuil de décision (0.35, pas 0.30)
 
-Une cabine peinte en bleu (sans bâche) peut faire remonter le % de bleu mesuré jusqu'à ~28-31% selon les conditions — relevé le seuil de 0.30 à 0.35 pour créer une marge de sécurité, les camions réellement chargés testés restant tous ≥45%. Fait notable : augmenter `side_margin` pour tenter d'exclure la cabine par les bords a l'effet **inverse** (concentre la ROI sur la cabine plutôt que de l'exclure) — ne pas l'utiliser comme levier pour ce problème. Détail complet dans `RAPPORT_TESTS.md` §7.
+Une cabine peinte en bleu (sans bâche) peut faire remonter le % de bleu mesuré jusqu'à ~28-31% selon les conditions — relevé le seuil de 0.30 à 0.35 pour créer une marge de sécurité, les camions réellement chargés testés restant tous ≥45%. Fait notable : sur une vue de côté (cabine ne dépassant pas de la ROI), augmenter la marge latérale **symétrique** pour tenter d'exclure la cabine a l'effet **inverse** (concentre la ROI restante sur la cabine plutôt que de l'exclure). Ce n'est qu'avec des marges **asymétriques** (`left_margin`/`right_margin` indépendants, voir §4 et `RAPPORT_TESTS.md` §7.4) qu'exclure spécifiquement le côté cabine devient efficace — mais cela suppose de savoir de quel côté elle se trouve pour la caméra du portail (à calibrer sur site, pas un réglage universel).
 
 ## 5. Limites connues
 
 - La règle de décision est basée uniquement sur la couleur bleue de la bâche, comme demandé au cahier des charges (pas de dataset custom). Un camion chargé mais **sans bâche bleue** (ex. porte-conteneur) sera classé "Vide" par le système — ce n'est pas un bug mais une limite assumée de l'approche colorimétrique.
-- Une **cabine peinte en bleu** peut être confondue avec une bâche si elle occupe une grande partie du haut de la bbox — atténué par le seuil à 0.35 mais pas éliminé structurellement (pas de segmentation cabine/caisse sans dataset custom).
+- Une **cabine peinte en bleu** peut être confondue avec une bâche si elle occupe une grande partie de la ROI — atténué par le seuil à 0.35 par défaut, et corrigeable précisément via `left_margin`/`right_margin` une fois qu'on connaît la position de la cabine pour la caméra installée. Pas de solution universelle sans calibrage (pas de segmentation cabine/caisse sans dataset custom).
 - La ROI rectangulaire axis-aligned perd en précision sur des rotations extrêmes de la caméra (±12° testé) — un cas limite documenté dans `RAPPORT_TESTS.md` §7.3.
+- Les paramètres par défaut (`top_ratio`, `left_margin`, `right_margin`) sont calibrés pour une **vue de côté** (les 5 photos de test principales). Une caméra de portail avec un angle très différent (face, 3/4, plongée...) nécessite un recalibrage dédié — voir `RAPPORT_TESTS.md` §7.4 pour un exemple concret.
 
 ## 6. Tests effectués
 

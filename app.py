@@ -125,7 +125,8 @@ def camera_worker():
                     frame,
                     threshold=float(p["seuil_bleu"]),
                     top_ratio=float(p["top_ratio"]),
-                    side_margin=float(p["side_margin"]),
+                    left_margin=float(p["left_margin"]),
+                    right_margin=float(p["right_margin"]),
                 )
                 last_infer = now
 
@@ -257,7 +258,8 @@ def analyser():
             frame,
             threshold=float(p["seuil_bleu"]),
             top_ratio=float(p["top_ratio"]),
-            side_margin=float(p["side_margin"]),
+            left_margin=float(p["left_margin"]),
+            right_margin=float(p["right_margin"]),
         )
         annotated = annotate_frame(frame.copy(), result)
 
@@ -352,7 +354,8 @@ def corriger(detection_id):
 BORNES_PARAMETRES = {
     "seuil_bleu": (0.0, 1.0),
     "top_ratio": (0.0, 0.9),
-    "side_margin": (0.0, 0.4),
+    "left_margin": (0.0, 0.85),
+    "right_margin": (0.0, 0.85),
 }
 
 
