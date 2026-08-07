@@ -81,7 +81,13 @@ def _migrer_side_margin(conn):
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
+    # timeout=10 : patiente jusqu'à 10s sur un verrou plutôt que d'échouer
+    # immédiatement. WAL : permet des lectures concurrentes pendant une
+    # écriture (le thread caméra lit la base en continu en tâche de fond).
+    # Sans ça, une simple requête depuis /portails pouvait entrer en
+    # collision avec ce thread et lever "database is locked".
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     return conn
 
