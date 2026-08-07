@@ -7,6 +7,7 @@ import csv
 import io
 import os
 import secrets
+import sqlite3
 import threading
 import time
 from functools import wraps
@@ -405,14 +406,20 @@ def portails():
             nom = request.form.get("nom", "").strip()
             camera_source = request.form.get("camera_source", "").strip()
             if nom and camera_source:
-                db.add_portail(nom, camera_source)
+                try:
+                    db.add_portail(nom, camera_source)
+                except sqlite3.IntegrityError:
+                    return render_template(
+                        "portails.html", portails=db.list_portails(), active="portails",
+                        erreur=f"Un portail nommé « {nom} » existe déjà — choisissez un autre nom.",
+                    )
         elif action == "activer":
             portail_id = request.form.get("portail_id")
             if portail_id:
                 db.set_portail_actif(int(portail_id))
         return redirect(url_for("portails"))
 
-    return render_template("portails.html", portails=db.list_portails(), active="portails")
+    return render_template("portails.html", portails=db.list_portails(), active="portails", erreur=None)
 
 
 @app.route("/compte", methods=["GET", "POST"])

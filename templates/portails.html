@@ -4,6 +4,10 @@
   <h1 class="page-title">Portails</h1>
   <p class="page-sub">Points d'entrée équipés de caméras. Un seul portail peut être actif à la fois (une caméra locale disponible sur ce poste).</p>
 
+  {% if erreur %}
+  <div class="alert alert-error">{{ erreur }}</div>
+  {% endif %}
+
   <div class="card">
     <h2>Portails enregistrés</h2>
     {% if portails %}
