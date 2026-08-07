@@ -72,6 +72,7 @@ Un assombrissement additif (`beta=-70`, réduction linéaire de chaque canal BGR
 | Authentification | accès sans session → redirection `/login` ; mauvais mot de passe rejeté ; bon mot de passe → accès accordé | conforme |
 | Multi-portails | ajout d'un portail, activation, bascule caméra | activation exclusive confirmée (un seul `actif=1`), pas de crash même avec une source caméra inexistante |
 | Analyse par upload (`/analyser`) | POST multipart avec photo réelle | pipeline exécuté, statut correct, image enregistrée et affichée |
+| Ajout de portail sous contention SQLite | signalé cassé par l'utilisateur (`database is locked`) ; corrigé (mode WAL + retry, voir `MANUEL_TECHNIQUE.md` §3quinquies) ; re-testé via HTTP réel après correctif | succès ; cause racine réelle = un processus `app.py` dupliqué retenant un verrou en continu, pas juste une collision de timing |
 
 ## 5. Audit de sécurité et corrections (2026-08-06)
 

@@ -2,7 +2,9 @@
 Base SQLite : portails (caméras d'entrée), historique des détections,
 paramètres réglables et comptes utilisateurs.
 """
+import functools
 import sqlite3
+import time
 from datetime import datetime
 
 from werkzeug.security import generate_password_hash
@@ -80,6 +82,29 @@ def _migrer_side_margin(conn):
     conn.execute("DELETE FROM parametres WHERE cle = 'side_margin'")
 
 
+def _avec_retry(tentatives=6, delai_initial=0.2):
+    """Réessaie une fonction d'accès DB en cas de verrou SQLite transitoire.
+    Même en mode WAL, deux PROCESSUS Python séparés (pas juste deux threads)
+    accédant à la même base en même temps peuvent occasionnellement se
+    bloquer mutuellement plus longtemps que le timeout de connexion — plutôt
+    que de renvoyer une erreur 500 à l'utilisateur, on réessaie avec un
+    délai croissant avant d'abandonner."""
+    def decorateur(fonction):
+        @functools.wraps(fonction)
+        def wrapper(*args, **kwargs):
+            delai = delai_initial
+            for essai in range(tentatives):
+                try:
+                    return fonction(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    if "locked" not in str(e).lower() or essai == tentatives - 1:
+                        raise
+                    time.sleep(delai)
+                    delai *= 2
+        return wrapper
+    return decorateur
+
+
 def get_connection():
     # timeout=10 : patiente jusqu'à 10s sur un verrou plutôt que d'échouer
     # immédiatement. WAL : permet des lectures concurrentes pendant une
@@ -92,6 +117,7 @@ def get_connection():
     return conn
 
 
+@_avec_retry()
 def init_db():
     conn = get_connection()
     conn.executescript(SCHEMA)
@@ -118,6 +144,7 @@ def init_db():
     conn.close()
 
 
+@_avec_retry()
 def set_mot_de_passe(identifiant, nouveau_mot_de_passe):
     conn = get_connection()
     conn.execute(
@@ -128,6 +155,7 @@ def set_mot_de_passe(identifiant, nouveau_mot_de_passe):
     conn.close()
 
 
+@_avec_retry()
 def get_utilisateur(identifiant):
     conn = get_connection()
     row = conn.execute(
@@ -137,6 +165,7 @@ def get_utilisateur(identifiant):
     return dict(row) if row else None
 
 
+@_avec_retry()
 def get_parametres():
     conn = get_connection()
     rows = conn.execute("SELECT cle, valeur FROM parametres").fetchall()
@@ -144,6 +173,7 @@ def get_parametres():
     return {row["cle"]: row["valeur"] for row in rows}
 
 
+@_avec_retry()
 def set_parametre(cle, valeur):
     conn = get_connection()
     conn.execute("UPDATE parametres SET valeur = ? WHERE cle = ?", (str(valeur), cle))
@@ -151,6 +181,7 @@ def set_parametre(cle, valeur):
     conn.close()
 
 
+@_avec_retry()
 def corriger_detection(detection_id, nouveau_statut):
     conn = get_connection()
     row = conn.execute(
@@ -168,6 +199,7 @@ def corriger_detection(detection_id, nouveau_statut):
     conn.close()
 
 
+@_avec_retry()
 def list_portails():
     conn = get_connection()
     rows = conn.execute("SELECT * FROM portails").fetchall()
@@ -175,6 +207,7 @@ def list_portails():
     return [dict(row) for row in rows]
 
 
+@_avec_retry()
 def get_portail_by_nom(nom):
     conn = get_connection()
     row = conn.execute("SELECT * FROM portails WHERE nom = ?", (nom,)).fetchone()
@@ -182,6 +215,7 @@ def get_portail_by_nom(nom):
     return dict(row) if row else None
 
 
+@_avec_retry()
 def get_portail_actif():
     conn = get_connection()
     row = conn.execute("SELECT * FROM portails WHERE actif = 1 LIMIT 1").fetchone()
@@ -189,6 +223,7 @@ def get_portail_actif():
     return dict(row) if row else None
 
 
+@_avec_retry()
 def add_portail(nom, camera_source):
     conn = get_connection()
     conn.execute(
@@ -199,6 +234,7 @@ def add_portail(nom, camera_source):
     conn.close()
 
 
+@_avec_retry()
 def set_portail_actif(portail_id):
     conn = get_connection()
     conn.execute("UPDATE portails SET actif = 0")
@@ -207,6 +243,7 @@ def set_portail_actif(portail_id):
     conn.close()
 
 
+@_avec_retry()
 def add_detection(portail_id, statut, ratio_bleu, confiance=None, image_path=None):
     conn = get_connection()
     conn.execute(
@@ -218,6 +255,7 @@ def add_detection(portail_id, statut, ratio_bleu, confiance=None, image_path=Non
     conn.close()
 
 
+@_avec_retry()
 def list_detections(portail_id=None, limit=100, date=None, statut=None):
     query = "SELECT * FROM detections WHERE 1=1"
     params = []

@@ -96,6 +96,19 @@ Le modèle détecte parfois la caisse avec une bbox très proche de l'annotation
 3. Relancer `preparer_dataset.py` puis `entrainer.py`.
 4. Vérifier avec `evaluer.py` avant de considérer le nouveau modèle fiable.
 
+## 3quinquies. Fiabilité SQLite en accès concurrent
+
+Symptôme observé (2026-08-07) : `/portails` (ajout d'un portail) échouait par intermittence avec `sqlite3.OperationalError: database is locked` (erreur 500).
+
+**Deux causes identifiées, deux correctifs :**
+
+1. **Mode journal par défaut peu tolérant à la concurrence.** Le thread caméra (`camera_worker`) interroge la base en continu (`db.get_portail_actif()` chaque seconde) ; en mode rollback-journal (défaut SQLite), une écriture concurrente peut se heurter à ces lectures. Corrigé par le passage en **mode WAL** (`PRAGMA journal_mode=WAL` dans `get_connection()`) + timeout de connexion explicite (10s), et par un **décorateur de nouvelle tentative** (`_avec_retry`, appliqué à toutes les fonctions publiques de `db.py`) qui réessaie avec délai croissant en cas de verrou transitoire au lieu d'échouer immédiatement.
+2. **Cause principale réelle : un processus fantôme.** Malgré le correctif ci-dessus, l'erreur persistait — y compris sur une écriture isolée, sans charge. Diagnostic : un second processus `app.py` (lancé avec l'interpréteur Python global de l'utilisateur, pas le venv du projet) tournait en parallèle du serveur "officiel", retenant un verrou en continu. Ce phénomène de double instance s'est reproduit plusieurs fois pendant le développement, sans qu'on en identifie la cause exacte côté IDE/environnement utilisateur — **arrêter ce processus dupliqué a immédiatement résolu le problème**, sans avoir besoin d'aucune nouvelle tentative.
+
+**Recommandation opérationnelle** : ne lancer qu'**une seule instance** de `app.py` à la fois sur un même poste (une seule caméra à piloter, un seul serveur web, une seule base SQLite locale). En cas d'erreur "database is locked" récurrente, vérifier d'abord `tasklist` (Windows) / `ps aux | grep app.py` (Linux/Mac) pour repérer un doublon avant de suspecter un bug applicatif.
+
+Testé : 6 processus séparés écrivant en boucle serrée (60 écritures rapides) parviennent tout de même à épuiser les tentatives de `_avec_retry` — SQLite n'est structurellement pas prévu pour de l'écriture multi-processus intensive. Sans surprise pour ce projet (un seul serveur actif prévu), mais à garder en tête si le volume d'écritures augmentait significativement (migration vers PostgreSQL/MySQL recommandée dans ce cas).
+
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 
 1. `detect_truck_bbox()` : inférence YOLOv8n, garde la détection `truck`/`bus` la plus confiante (seuil de confiance 0.4).
