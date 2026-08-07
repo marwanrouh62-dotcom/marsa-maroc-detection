@@ -58,17 +58,23 @@ Non traité (accepté comme limite, cf. §8) : pas de limitation du nombre de te
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 
 1. `detect_truck_bbox()` : inférence YOLOv8n, garde la détection `truck`/`bus` la plus confiante (seuil de confiance 0.4).
-2. `extract_benne_roi()` : approxime la benne comme la partie basse/arrière de la bbox (exclut le haut = cabine via `top_ratio`, rogne les bords via `side_margin`). **Heuristique non calibrée sur un vrai portail** — à ajuster selon l'angle de caméra réel (paramètres réglables en interface).
+2. `extract_benne_roi()` : approxime la zone de la **bâche** comme la partie **haute** de la bbox (sous une fine marge `top_margin=0.05` en haut, sur une hauteur `top_ratio=0.45`), bords rognés via `side_margin`. **Heuristique non calibrée sur un vrai portail** — à ajuster selon l'angle de caméra réel (paramètres réglables en interface). Historique : la ROI ciblait initialement le **bas** de la bbox (hypothèse "cabine en haut, benne en bas") ; inversée le 2026-08-07 après qu'une photo réelle de camion benne bâchée (bâche bombée au-dessus de la caisse) ait révélé que la ROI basse ratait la bâche (voir `RAPPORT_TESTS.md` §7.1).
 3. `blue_pixel_ratio()` : conversion BGR→HSV, `cv2.inRange` avec `BLUE_HSV_LOWER=(90,60,15)` / `BLUE_HSV_UPPER=(130,255,255)`.
-4. `decide_status()` : `ratio >= seuil_bleu` → "Chargé", sinon "Vide".
+4. `decide_status()` : `ratio >= seuil_bleu` (0.35 par défaut) → "Chargé", sinon "Vide".
 
 ### Choix du seuil V minimum (15, pas 40)
 
 Testé en Jour 6 : un seuil V trop élevé (40) fait passer les vrais camions bâchés en faux "Vide" sous faible luminosité, car l'atténuation lumineuse réelle (multiplicative) fait chuter V bien plus que la teinte (H) ou la saturation (S). V=15 avec S≥60 reste sélectif (pas de faux positif sur asphalte/gris, vérifié).
 
-## 5. Limite connue
+### Choix du seuil de décision (0.35, pas 0.30)
 
-La règle de décision est basée uniquement sur la couleur bleue de la bâche, comme demandé au cahier des charges (pas de dataset custom). Un camion chargé mais **sans bâche bleue** (ex. porte-conteneur) sera classé "Vide" par le système — ce n'est pas un bug mais une limite assumée de l'approche colorimétrique. Validé sur photo réelle (21.6% de bleu résiduel, provenant du bras de grue bleu de l'engin, sous le seuil de 30%).
+Une cabine peinte en bleu (sans bâche) peut faire remonter le % de bleu mesuré jusqu'à ~28-31% selon les conditions — relevé le seuil de 0.30 à 0.35 pour créer une marge de sécurité, les camions réellement chargés testés restant tous ≥45%. Fait notable : augmenter `side_margin` pour tenter d'exclure la cabine par les bords a l'effet **inverse** (concentre la ROI sur la cabine plutôt que de l'exclure) — ne pas l'utiliser comme levier pour ce problème. Détail complet dans `RAPPORT_TESTS.md` §7.
+
+## 5. Limites connues
+
+- La règle de décision est basée uniquement sur la couleur bleue de la bâche, comme demandé au cahier des charges (pas de dataset custom). Un camion chargé mais **sans bâche bleue** (ex. porte-conteneur) sera classé "Vide" par le système — ce n'est pas un bug mais une limite assumée de l'approche colorimétrique.
+- Une **cabine peinte en bleu** peut être confondue avec une bâche si elle occupe une grande partie du haut de la bbox — atténué par le seuil à 0.35 mais pas éliminé structurellement (pas de segmentation cabine/caisse sans dataset custom).
+- La ROI rectangulaire axis-aligned perd en précision sur des rotations extrêmes de la caméra (±12° testé) — un cas limite documenté dans `RAPPORT_TESTS.md` §7.3.
 
 ## 6. Tests effectués
 

@@ -20,6 +20,8 @@ TEST_IMAGES = [
     "test_images/camion_bache_1.jpg",
     "test_images/camion_bache_2.png",
     "test_images/camion_conteneur_sans_bache.png",
+    "test_images/camion_benne_bache_haut.jpg",
+    "test_images/camion_bleu_cabine_sans_bache_2.jpg",
 ]
 OUT_DIR = "test_images/conditions"
 

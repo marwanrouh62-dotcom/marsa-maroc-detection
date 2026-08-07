@@ -72,3 +72,4 @@ Accessible via le nom d'utilisateur affiché en haut à droite.
 
 - **Aucun camion détecté** : s'affiche quand aucun véhicule n'est dans le champ de la caméra, ou si le modèle ne le reconnaît pas (mauvais angle, trop loin).
 - **Camion sans bâche bleue** (ex. porte-conteneur) : sera classé "Vide" par la règle de décision actuelle, qui se base uniquement sur la présence de bleu — voir le manuel technique pour cette limite connue.
+- **Camion à cabine peinte en bleu** : un camion sans bâche mais à cabine bleue peut occasionnellement être classé "Chargé" à tort si la couleur de la cabine domine la zone analysée. En cas de doute, utiliser la **correction manuelle** dans l'historique (§5).

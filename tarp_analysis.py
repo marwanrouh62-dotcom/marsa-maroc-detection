@@ -14,25 +14,29 @@ BLUE_HSV_LOWER = (90, 60, 15)
 BLUE_HSV_UPPER = (130, 255, 255)
 
 # Seuil de décision : au-delà de ce % de pixels bleus dans la ROI -> "Chargé".
-BLUE_RATIO_THRESHOLD = 0.30
+BLUE_RATIO_THRESHOLD = 0.35
 
 
-def extract_benne_roi(frame, bbox, top_ratio=0.35, side_margin=0.05):
+def extract_benne_roi(frame, bbox, top_ratio=0.45, side_margin=0.05, top_margin=0.05):
     """
-    Approxime la zone de la benne à partir de la bounding box du camion.
+    Approxime la zone de la bâche à partir de la bounding box du camion.
 
     Hypothèse (à calibrer sur site selon l'angle de la caméra du portail) :
-    la cabine occupe le haut de la bbox, la benne occupe la partie basse/arrière.
-    `top_ratio` exclut le haut de la bbox (cabine), `side_margin` rogne les bords.
+    sur un camion benne bâché, la bâche forme un bombé au-dessus de la caisse,
+    dans la partie HAUTE du camion (au-dessus des parois métalliques et du
+    châssis/roues qui occupent le bas). `top_margin` exclut une fine bande
+    tout en haut (ciel, antenne...), `top_ratio` définit la fraction de
+    hauteur analysée à partir de là, `side_margin` rogne les bords latéraux.
     """
     x1, y1, x2, y2 = bbox
     h = y2 - y1
     w = x2 - x1
-    roi_y1 = y1 + int(h * top_ratio)
+    roi_y1 = y1 + int(h * top_margin)
+    roi_y2 = y1 + int(h * (top_margin + top_ratio))
     roi_x1 = x1 + int(w * side_margin)
     roi_x2 = x2 - int(w * side_margin)
-    roi_box = (roi_x1, roi_y1, roi_x2, y2)
-    return frame[roi_y1:y2, roi_x1:roi_x2], roi_box
+    roi_box = (roi_x1, roi_y1, roi_x2, roi_y2)
+    return frame[roi_y1:roi_y2, roi_x1:roi_x2], roi_box
 
 
 def blue_pixel_ratio(roi_bgr):

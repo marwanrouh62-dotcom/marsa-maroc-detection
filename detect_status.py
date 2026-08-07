@@ -38,8 +38,8 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline camion + bâche bleue")
     parser.add_argument("--image", help="Chemin vers une image de test")
     parser.add_argument("--video", help="Chemin vers une vidéo de test")
-    parser.add_argument("--threshold", type=float, default=0.30, help="Seuil % pixels bleus")
-    parser.add_argument("--top-ratio", type=float, default=0.35, help="Fraction haute de la bbox exclue (cabine)")
+    parser.add_argument("--threshold", type=float, default=0.35, help="Seuil % pixels bleus")
+    parser.add_argument("--top-ratio", type=float, default=0.45, help="Fraction de hauteur (bâche) analysée depuis le haut")
     parser.add_argument("--side-margin", type=float, default=0.05, help="Marge latérale rognée de la ROI")
     args = parser.parse_args()
 

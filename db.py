@@ -49,7 +49,7 @@ PORTAILS_INITIAUX = {
 
 # Seuils/paramètres de détection réglables depuis l'interface (Jour 5).
 PARAMETRES_INITIAUX = {
-    "seuil_bleu": "0.30",
+    "seuil_bleu": "0.35",
     "top_ratio": "0.35",
     "side_margin": "0.05",
 }

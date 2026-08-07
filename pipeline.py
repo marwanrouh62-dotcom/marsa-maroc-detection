@@ -39,7 +39,7 @@ def detect_truck_bbox(frame):
     return (x1, y1, x2, y2), TRUCK_CLASSES[int(best_box.cls[0])], best_conf
 
 
-def run_pipeline(frame, threshold=0.30, top_ratio=0.35, side_margin=0.05):
+def run_pipeline(frame, threshold=0.35, top_ratio=0.45, side_margin=0.05):
     """Exécute le pipeline complet sur une frame et renvoie un dict de résultat."""
     detection = detect_truck_bbox(frame)
     if detection is None:
