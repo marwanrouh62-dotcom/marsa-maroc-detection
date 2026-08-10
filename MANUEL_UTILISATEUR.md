@@ -23,7 +23,8 @@ L'accès à l'application nécessite une authentification.
 ## 3. Page d'accueil
 
 - **Flux en direct** : image de la caméra du portail, rafraîchie en continu. Le statut détecté (Chargé / Vide) et le % de pixels bleus sont incrustés directement sur l'image, avec la zone du camion (cadre bleu) et la zone d'analyse de la benne (cadre vert).
-- **Bouton "Enregistrer la détection actuelle dans l'historique"** : sauvegarde l'état affiché à l'instant (image + statut + horodatage) dans la base de données.
+- **Enregistrement automatique** : chaque camion qui passe devant la caméra est détecté et enregistré automatiquement dans l'historique, sans intervention. Le système attend qu'un camion soit visible de façon stable (~1,5 seconde) avant de le compter — pour ignorer les détections isolées/parasites — et attend qu'il ait vraiment quitté le champ (~1 seconde d'absence) avant d'enregistrer, pour ne pas couper un même camion en plusieurs entrées si une image est ratée au milieu du passage. Le statut enregistré est celui obtenu majoritairement pendant tout le passage (pas juste la dernière image).
+- **Bouton "Forcer un enregistrement immédiat"** : reste disponible pour un cas particulier (test, camion immobile trop longtemps) — capture l'état affiché à l'instant, en plus de l'enregistrement automatique.
 - Si aucune caméra n'est disponible (ex. déploiement cloud sans webcam), un message invite à utiliser **Analyser une photo** à la place.
 
 ## 4. Analyser une photo

@@ -17,6 +17,8 @@
 |---|---|
 | `pipeline.py` | Pipeline de détection partagé (YOLO + ROI + HSV), utilisé par le CLI et le backend. |
 | `tarp_analysis.py` | Extraction ROI benne + calcul % pixels bleus + décision Chargé/Vide. Constantes HSV et seuil par défaut. |
+| `passage_tracker.py` | `SuiviPassage` : suit un camion à travers plusieurs inférences successives et décide quand l'enregistrer automatiquement (voir §3sexies). |
+| `test_passage_tracker.py` | Tests unitaires de `SuiviPassage` (séquences temporelles synthétiques). |
 | `db.py` | Accès SQLite : portails, détections, paramètres réglables, corrections manuelles, utilisateurs. |
 | `app.py` | Serveur Flask : authentification par session + CSRF, thread caméra résilient (avec bascule dynamique de portail actif), flux `/video_feed`, routes `/`, `/capturer`, `/analyser`, `/historique` (+ export CSV), `/portails`, `/parametres`, `/compte`, `/captures/<fichier>`. |
 | `detect_truck.py` | Script CLI Jour 1 : détection camion seule (démo/debug). |
@@ -108,6 +110,35 @@ Symptôme observé (2026-08-07) : `/portails` (ajout d'un portail) échouait par
 **Recommandation opérationnelle** : ne lancer qu'**une seule instance** de `app.py` à la fois sur un même poste (une seule caméra à piloter, un seul serveur web, une seule base SQLite locale). En cas d'erreur "database is locked" récurrente, vérifier d'abord `tasklist` (Windows) / `ps aux | grep app.py` (Linux/Mac) pour repérer un doublon avant de suspecter un bug applicatif.
 
 Testé : 6 processus séparés écrivant en boucle serrée (60 écritures rapides) parviennent tout de même à épuiser les tentatives de `_avec_retry` — SQLite n'est structurellement pas prévu pour de l'écriture multi-processus intensive. Sans surprise pour ce projet (un seul serveur actif prévu), mais à garder en tête si le volume d'écritures augmentait significativement (migration vers PostgreSQL/MySQL recommandée dans ce cas).
+
+## 3sexies. Enregistrement automatique du passage d'un camion (2026-08-10)
+
+Avant cette évolution, seul un enregistrement **manuel** (bouton "Enregistrer") ou une **analyse par upload** créait une entrée d'historique — le flux vidéo affichait bien un statut en direct, mais rien n'était sauvegardé automatiquement quand un camion passait réellement devant le portail (EF-04 incomplet, voir cahier des charges).
+
+### Le problème à résoudre
+
+On ne peut pas simplement enregistrer le résultat de chaque inférence (`INFER_INTERVAL` = 0.7s) : un camion visible 5 secondes générerait ~7 entrées dupliquées pour un seul passage. Il faut détecter les **transitions** (camion qui arrive / camion qui repart) et n'enregistrer qu'une fois, à la fin d'un passage réel — tout en filtrant :
+- les détections isolées/parasites (une seule image où YOLO se trompe) ;
+- les images ratées au milieu d'un vrai passage (qui couperaient artificiellement un camion en deux entrées).
+
+### Solution : `passage_tracker.SuiviPassage`
+
+Classe indépendante du reste de l'app (pas de dépendance à Flask/SQLite/cv2), pour être testable avec des séquences temporelles synthétiques sans caméra ni camion réel — voir `test_passage_tracker.py` (4 scénarios, tous validés) :
+
+- **Passage normal** (détecté en continu plusieurs secondes puis absent) → un seul enregistrement, au bon statut.
+- **Détection isolée** (une seule image, aussitôt absente) → aucun enregistrement (durée de présence < `DUREE_MIN_PRESENCE`).
+- **Image ratée au milieu d'un vrai passage** → toujours un seul enregistrement (pas coupé en deux, grâce à `DUREE_GRACE_ABSENCE`).
+- **Vote majoritaire** : si le statut a fluctué pendant le passage (angle, reflet...), c'est le statut obtenu sur la majorité des lectures qui est retenu, pas juste la dernière image.
+
+Paramètres (constantes `app.py`, non exposés en interface pour l'instant) :
+- `DUREE_MIN_PRESENCE = 1.5s` : détection continue minimale avant de compter un passage.
+- `DUREE_GRACE_ABSENCE = 1.0s` : absence minimale avant de considérer le camion vraiment reparti.
+
+### Intégration dans `camera_worker`
+
+À chaque inférence (toutes les `INFER_INTERVAL`), le résultat est transmis à `suivi.observer(result, now)`. Si elle renvoie un résultat (passage terminé), `_enregistrer_passage()` sauvegarde l'image (dernière image où le camion était visible) et crée l'entrée d'historique via `db.add_detection()` — testé directement (écriture réelle en base + fichier image, vérifiés).
+
+Le bouton manuel "Enregistrer" reste disponible (renommé "Forcer un enregistrement immédiat") pour les cas particuliers, en complément de l'automatique.
 
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 

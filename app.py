@@ -18,6 +18,7 @@ from flask import Flask, Response, abort, redirect, render_template, request, se
 from werkzeug.security import check_password_hash
 
 import db
+from passage_tracker import SuiviPassage
 from pipeline import annotate_frame, run_pipeline
 
 app = Flask(__name__)
@@ -32,6 +33,14 @@ os.makedirs(CAPTURES_DIR, exist_ok=True)
 
 INFER_INTERVAL = 0.7  # secondes entre deux inférences YOLO sur le flux live
 PORTAIL_POLL_INTERVAL = 1.0  # secondes entre deux vérifications du portail actif
+
+# Enregistrement automatique du passage d'un camion (voir camera_worker) :
+# un camion doit être détecté en continu au moins DUREE_MIN_PRESENCE avant
+# d'être enregistré (filtre le bruit/faux positif d'une seule image), et
+# doit être absent depuis au moins DUREE_GRACE_ABSENCE avant d'être
+# considéré comme reparti (tolère une image manquée au milieu du passage).
+DUREE_MIN_PRESENCE = 1.5
+DUREE_GRACE_ABSENCE = 1.0
 
 db.init_db()
 
@@ -84,6 +93,19 @@ def verifier_csrf():
             abort(403)
 
 
+def _enregistrer_passage(portail_id, image, statut, ratio_bleu, confiance):
+    """Sauvegarde automatique d'un passage de camion détecté (voir camera_worker)."""
+    filename = f"auto_{int(time.time())}.jpg"
+    cv2.imwrite(os.path.join(CAPTURES_DIR, filename), image)
+    db.add_detection(
+        portail_id=portail_id,
+        statut=statut,
+        ratio_bleu=ratio_bleu,
+        confiance=confiance,
+        image_path=filename,
+    )
+
+
 def camera_worker():
     global latest_frame, latest_annotated_frame, latest_result, camera_ok
 
@@ -91,6 +113,8 @@ def camera_worker():
     current_portail_id = None
     last_infer = 0.0
     last_portail_check = 0.0
+    suivi = SuiviPassage(DUREE_MIN_PRESENCE, DUREE_GRACE_ABSENCE)
+    derniere_image_avec_camion = None
 
     while True:
         try:
@@ -130,6 +154,21 @@ def camera_worker():
                     right_margin=float(p["right_margin"]),
                 )
                 last_infer = now
+
+                if result["camion_detecte"]:
+                    derniere_image_avec_camion = annotate_frame(frame.copy(), result)
+
+                passage_termine = suivi.observer(result, now)
+                if passage_termine is not None and derniere_image_avec_camion is not None:
+                    portail_actuel = db.get_portail_actif()
+                    if portail_actuel:
+                        _enregistrer_passage(
+                            portail_actuel["id"],
+                            derniere_image_avec_camion,
+                            passage_termine["statut"],
+                            passage_termine["ratio_bleu"],
+                            passage_termine["confiance"],
+                        )
 
             annotated = annotate_frame(frame.copy(), result)
             with state_lock:

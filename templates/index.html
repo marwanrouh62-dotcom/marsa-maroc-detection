@@ -2,7 +2,7 @@
 {% block title %}Accueil{% endblock %}
 {% block content %}
   <h1 class="page-title">Portail — {{ portail.nom }}</h1>
-  <p class="page-sub">Surveillance en direct du taux de remplissage des camions à l'entrée du portail.</p>
+  <p class="page-sub">Surveillance en direct du taux de remplissage des camions à l'entrée du portail. Chaque camion qui passe devant la caméra est détecté et enregistré automatiquement dans l'historique — pas besoin d'intervention.</p>
 
   {% if request.args.get('erreur') == 'camera' %}
     <div class="alert alert-error">Caméra du portail indisponible — vérifiez la connexion de la source vidéo.</div>
@@ -20,7 +20,8 @@
     </div>
     <form action="/capturer" method="post" style="margin-top:1.25rem;">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="btn btn-primary">Enregistrer la détection actuelle dans l'historique</button>
+      <button type="submit" class="btn btn-secondary">Forcer un enregistrement immédiat</button>
+      <span class="hint">L'enregistrement automatique se déclenche seul quand un camion passe — ce bouton force une capture ponctuelle de l'état actuel (test, cas particulier).</span>
     </form>
     {% else %}
     <p class="empty-state">
