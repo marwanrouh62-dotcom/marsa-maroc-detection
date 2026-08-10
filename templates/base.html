@@ -5,22 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Détection remplissage camions{% endblock %} — Marsa Maroc</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22><rect width=%2232%22 height=%2232%22 rx=%227%22 fill=%22%23123a7a%22/><path d=%22M6 21h20M9 21v-6h9l4 4v2M9 15V9h6v6%22 stroke=%22%23fff%22 stroke-width=%222%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/><circle cx=%2212%22 cy=%2223%22 r=%221.6%22 fill=%22%23fff%22/><circle cx=%2222%22 cy=%2223%22 r=%221.6%22 fill=%22%23fff%22/></svg>">
+  <link rel="icon" href="{{ url_for('static', filename='img/logo_compact.png') }}">
 </head>
 <body>
   <nav class="navbar">
     <a class="brand" href="/">
-      <span class="brand-mark">
-        <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
-          <path d="M6 21h20M9 21v-6h9l4 4v2M9 15V9h6v6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="12" cy="23" r="1.6" fill="#fff"/>
-          <circle cx="22" cy="23" r="1.6" fill="#fff"/>
-        </svg>
-      </span>
-      <span>
-        Marsa Maroc
-        <span class="brand-sub">Détection remplissage camions</span>
-      </span>
+      <img class="brand-logo" src="{{ url_for('static', filename='img/logo_compact.png') }}" alt="Marsa Maroc">
+      <span class="brand-sub">Détection remplissage camions</span>
     </a>
     <div class="navlinks">
       <a href="/" class="{{ 'active' if active == 'accueil' }}">Accueil</a>
@@ -29,7 +20,7 @@
       <a href="/portails" class="{{ 'active' if active == 'portails' }}">Portails</a>
       <a href="/parametres" class="{{ 'active' if active == 'parametres' }}">Paramètres</a>
       {% if session.utilisateur %}
-      <a href="/compte" class="{{ 'active' if active == 'compte' }}" style="margin-left:0.75rem; border-left:1px solid rgba(255,255,255,0.15); padding-left:1rem;">{{ session.utilisateur }}</a>
+      <a href="/compte" class="{{ 'active' if active == 'compte' }}" style="margin-left:0.75rem; border-left:1px solid var(--border); padding-left:1rem;">{{ session.utilisateur }}</a>
       <a href="/logout">Déconnexion</a>
       {% endif %}
     </div>

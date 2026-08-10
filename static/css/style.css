@@ -1,11 +1,12 @@
 /* Design system - Marsa Maroc / Détection remplissage camions */
 
 :root {
-  --navy-900: #081b3a;
-  --navy-800: #0d2b5e;
-  --navy-700: #123a7a;
-  --navy-600: #1b4d9e;
-  --accent: #0ea5e9;
+  /* Couleurs alignées sur le logo officiel Marsa Maroc (échantillonnées). */
+  --navy-900: #0f2547;
+  --navy-800: #16305f;
+  --navy-700: #19376d;
+  --navy-600: #1e4488;
+  --accent: #047ab8;
   --charge: #15803d;
   --charge-bg: #ecfdf3;
   --vide: #b45309;
@@ -35,14 +36,15 @@ body {
 
 /* --- Navbar --- */
 .navbar {
-  background: linear-gradient(180deg, var(--navy-800), var(--navy-900));
-  color: #fff;
+  background: #ffffff;
+  color: var(--text);
   padding: 0 2rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
-  box-shadow: var(--shadow-md);
+  height: 68px;
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -51,40 +53,33 @@ body {
 .brand {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: 0.01em;
-  color: #fff;
+  gap: 0.75rem;
   text-decoration: none;
 }
 
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
-  background: var(--accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+.brand-logo {
+  height: 36px;
+  width: auto;
+  display: block;
 }
 
 .brand-sub {
-  font-weight: 400;
+  font-weight: 500;
   font-size: 0.75rem;
-  color: #9db4d9;
+  color: var(--text-muted);
   display: block;
-  margin-top: 1px;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--border);
 }
 
 .navlinks {
   display: flex;
+  align-items: center;
   gap: 0.25rem;
 }
 
 .navlinks a {
-  color: #cdd9ef;
+  color: var(--text-muted);
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
@@ -94,8 +89,8 @@ body {
 }
 
 .navlinks a:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--neutre-bg);
+  color: var(--navy-900);
 }
 
 .navlinks a.active {
