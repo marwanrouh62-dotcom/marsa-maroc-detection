@@ -10,6 +10,7 @@ test_images/conditions/
 captures/
 tools/
 yolov8n.pt
+yolov8s.pt
 .claude/
 dataset_cabine_caisse/entrainement/weights/last.pt
 dataset_cabine_caisse/entrainement/*.jpg

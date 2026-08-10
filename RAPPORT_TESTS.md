@@ -2,6 +2,8 @@
 
 ## 1. Détection camion (YOLOv8n pré-entraîné)
 
+*Section historique (Jour 1) — le modèle utilisé en production est passé à YOLOv8s le 2026-08-10, voir §11.*
+
 | Test | Source | Résultat |
 |---|---|---|
 | Détection sur image d'exemple | `bus.jpg` (Ultralytics) | Détecté, confiance 0.87, bbox correcte |
@@ -192,11 +194,28 @@ Seule approche qui fonctionne en principe : un modèle entraîné à reconnaîtr
 
 **Conclusion** : le mécanisme (annotation → entraînement → intégration avec repli automatique) est validé de bout en bout et apporte un gain mesurable (2/6 cas). Le modèle lui-même nécessite beaucoup plus de données annotées (quelques dizaines à quelques centaines d'images, idéalement de la caméra réelle du portail) avant d'être fiable comme détecteur principal. Voir `MANUEL_TECHNIQUE.md` §3quater pour la procédure de ré-entraînement.
 
-## 10. Limites connues (non-bugs, limites d'approche)
+## 11. YOLOv8s remplace YOLOv8n (2026-08-10)
+
+Objectif : améliorer la détection du camion elle-même (piste identifiée comme rapide à tester, cf. discussion sur la "professionnalisation" de la détection).
+
+| Photo | Confiance YOLOv8n | Confiance YOLOv8s |
+|---|---|---|
+| camion_bache_1 | 0.93 | 0.90 |
+| camion_bache_2 | 0.66 | **0.94** |
+| conteneur_sans_bache | 0.84 | 0.94 |
+| camion_benne_bache_haut | 0.91 | 0.86 |
+| cabine_bleue_sans_bache | 0.93 | 0.94 |
+| camion 3/4 | 0.90 | 0.95 |
+| **Moyenne** | 0.86 | **0.92** |
+
+**Re-validation `test_conditions.py` (40 combinaisons) : 40/40 correctement classées**, contre 39/40 avec YOLOv8n. Le seul cas limite jusque-là documenté (§7.3, rotation -12° sur `camion_benne_bache_haut`, 34.8%) passe à 35.1% — du bon côté du seuil — grâce à une bounding box légèrement mieux cadrée. Coût : ~300-400ms/inférence au lieu de ~180ms (CPU sans GPU), toujours largement dans le budget de 0.7s entre deux inférences.
+
+## 12. Limites connues (non-bugs, limites d'approche)
 
 - La règle de décision ne détecte que la couleur bleue — un camion chargé sans bâche bleue (ex. conteneur) est classé "Vide". Comportement volontaire du cahier des charges (approche sans dataset).
-- La ROI "bâche" par défaut est une heuristique géométrique (haut de la bounding box, rectangle axis-aligned), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site. Elle perd en précision sur les rotations extrêmes (voir §7.3) et ne distingue pas la cabine de la caisse par position (seule la couleur mesurée en résulte, compensée par le seuil — voir §7.2 — ou par un calibrage asymétrique `left_margin`/`right_margin` — voir §7.4).
+- La ROI "bâche" par défaut est une heuristique géométrique (haut de la bounding box, rectangle axis-aligned), non calibrée sur le portail réel — à ajuster via les paramètres une fois la caméra installée sur site. Elle ne distingue pas la cabine de la caisse par position (seule la couleur mesurée en résulte, compensée par le seuil — voir §7.2 — ou par un calibrage asymétrique `left_margin`/`right_margin` — voir §7.4). La perte de précision sur les rotations extrêmes documentée en §7.3 est résolue depuis le passage à YOLOv8s (§11).
 - Une cabine peinte en bleu reste un facteur de risque de faux positif si elle occupe une grande partie de la ROI — atténué par le seuil à 0.35 par défaut, corrigeable précisément par calibrage `left_margin`/`right_margin` une fois l'angle de caméra du portail connu, ou par le modèle fine-tuné (§9) quand il est confiant.
 - Les valeurs par défaut (`top_ratio=0.45`, `left_margin=right_margin=0.05`) sont calibrées pour une vue de côté (les 5 photos de test principales) — un angle de caméra très différent (face, 3/4, plongée) nécessite un recalibrage dédié, comme démontré en §7.4.
 - Le modèle fine-tuné cabine/caisse (§9) n'est pas encore assez fiable pour remplacer l'heuristique par défaut — 5 images d'entraînement est très insuffisant pour un modèle de production. Il complète l'heuristique quand il est confiant, sans jamais la dégrader (repli automatique).
+- Le suivi de passage (`SuiviPassage`, voir `MANUEL_TECHNIQUE.md` §3sexies) ne gère qu'un camion à la fois dans le champ — deux camions qui se croisent ou se suivent de très près pourraient être comptés comme un seul passage. Pas de suivi multi-objets (tracking par identifiant) à ce stade.
 - Tests de robustesse basés sur 5 photos réelles (vue de côté) + variantes simulées, plus 2 photos réelles supplémentaires (vue 3/4, cabine bleue) validant le calibrage asymétrique et le modèle fine-tuné — pas de flux vidéo réel du portail Marsa Maroc (caméra non encore installée à ce stade du projet).

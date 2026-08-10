@@ -10,7 +10,11 @@ from ultralytics import YOLO
 from tarp_analysis import blue_pixel_ratio, decide_status, extract_benne_roi
 
 TRUCK_CLASSES = {7: "truck", 5: "bus"}
-MODEL_PATH = "yolov8n.pt"
+# YOLOv8s plutôt que YOLOv8n : confiance moyenne mesurée 0.86 -> 0.92 sur les
+# 6 photos de référence (jusqu'à 0.66 -> 0.94 sur le cas le plus faible),
+# pour un coût d'environ 300-400ms/inférence au lieu de ~180ms — largement
+# dans le budget de INFER_INTERVAL (0.7s) sur un CPU modeste.
+MODEL_PATH = "yolov8s.pt"
 CONF_THRESHOLD = 0.4
 
 # Modèle optionnel fine-tuné pour détecter "cabine"/"caisse" séparément

@@ -4,7 +4,7 @@
 
 100% Python, exécution locale.
 
-- **Détection camion** : YOLOv8n pré-entraîné (COCO, `yolov8n.pt`), classes retenues : `truck` (7), `bus` (5).
+- **Détection camion** : YOLOv8s pré-entraîné (COCO, `yolov8s.pt`), classes retenues : `truck` (7), `bus` (5). (YOLOv8n utilisé jusqu'au 2026-08-10, voir §3septies pour le changement.)
 - **Détection de la caisse** : modèle YOLOv8n fine-tuné maison (`dataset_cabine_caisse/`, classes `cabine`/`caisse`) si disponible et confiant, sinon repli sur une heuristique géométrique (ROI calculée à partir de la bbox du camion). Voir §3quater.
 - **Détection bâche** : conversion HSV de la ROI (issue du modèle ou de l'heuristique), seuillage sur la teinte bleue.
 - **Backend** : Flask (serveur de dev), flux vidéo en MJPEG.
@@ -140,9 +140,31 @@ Paramètres (constantes `app.py`, non exposés en interface pour l'instant) :
 
 Le bouton manuel "Enregistrer" reste disponible (renommé "Forcer un enregistrement immédiat") pour les cas particuliers, en complément de l'automatique.
 
+## 3septies. YOLOv8s au lieu de YOLOv8n (2026-08-10)
+
+`MODEL_PATH` dans `pipeline.py` : `yolov8n.pt` → `yolov8s.pt` (modèle pré-entraîné COCO, toujours sans dataset personnalisé — seule la taille du modèle change).
+
+**Mesuré sur les 6 photos réelles de référence** (confiance de détection du camion) :
+
+| Photo | YOLOv8n | YOLOv8s |
+|---|---|---|
+| camion_bache_1 | 0.93 | 0.90 |
+| camion_bache_2 | 0.66 | **0.94** |
+| conteneur_sans_bache | 0.84 | 0.94 |
+| camion_benne_bache_haut | 0.91 | 0.86 |
+| cabine_bleue_sans_bache | 0.93 | 0.94 |
+| camion 3/4 | 0.90 | 0.95 |
+| **Moyenne** | **0.86** | **0.92** |
+
+Gain net sur le cas jusque-là le plus faible (0.66 → 0.94). Deux photos baissent légèrement (bache_1, benne_bache_haut) mais restent largement au-dessus du seuil de confiance (0.4) — aucun risque de non-détection.
+
+**Vitesse** : ~300-400ms/inférence contre ~180ms pour YOLOv8n (mesuré sur un CPU Intel i5-7300U, sans GPU). Reste largement dans le budget de `INFER_INTERVAL` (0.7s entre deux inférences) et de l'exigence "<2s" du cahier des charges.
+
+**Re-validation complète** (`test_conditions.py`, 5 photos × 8 conditions = 40 combinaisons) : **40/40 correctement classées**, contre 39/40 avec YOLOv8n — le seul cas limite alors documenté (rotation -12° sur `camion_benne_bache_haut`, 34.8% juste sous le seuil) passe à 35.1%, cette fois du bon côté, grâce à une bbox légèrement mieux cadrée par le modèle plus précis.
+
 ## 4. Pipeline de détection (`pipeline.run_pipeline`)
 
-1. `detect_truck_bbox()` : inférence YOLOv8n, garde la détection `truck`/`bus` la plus confiante (seuil de confiance 0.4).
+1. `detect_truck_bbox()` : inférence YOLOv8s, garde la détection `truck`/`bus` la plus confiante (seuil de confiance 0.4).
 2. `extract_benne_roi()` : approxime la zone de la **bâche/caisse** à partir de la bbox du camion :
    - verticalement, cible la partie **haute** (`top_margin=0.05` exclut une fine bande tout en haut, `top_ratio=0.45` définit la hauteur analysée à partir de là) ;
    - horizontalement, `left_margin`/`right_margin` (indépendants, pas une marge symétrique) rognent chaque côté séparément — nécessaire pour exclure une cabine qui occupe tout un côté de la bbox sur une vue de face/3-4 (voir `RAPPORT_TESTS.md` §7.4).

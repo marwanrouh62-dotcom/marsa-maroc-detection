@@ -2,7 +2,7 @@
 
 Application web 100% Python de détection automatique de l'état de remplissage des camions (chargé/vide) par vision par ordinateur, pour les portails d'entrée de terminaux portuaires.
 
-- **Détection camion** : YOLOv8n pré-entraîné (COCO), sans dataset personnalisé.
+- **Détection camion** : YOLOv8s pré-entraîné (COCO), sans dataset personnalisé.
 - **Détection de la caisse** : modèle YOLOv8 fine-tuné maison (`dataset_cabine_caisse/`, expérimental) si assez confiant, sinon repli automatique sur une heuristique géométrique calibrable.
 - **Détection de chargement** : analyse colorimétrique HSV de la bâche bleue sur la zone détectée.
 - **Backend** : Flask + SQLite.
