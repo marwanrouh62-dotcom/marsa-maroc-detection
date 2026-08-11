@@ -95,7 +95,7 @@
         btnArreter.disabled = false;
         deviceSelect.disabled = false;
 
-        intervalId = setInterval(envoyerImage, 1000);
+        intervalId = setInterval(envoyerImage, 500);
       } catch (err) {
         afficherErreur("Impossible d'accéder à la caméra : " + err.message);
       }
@@ -139,6 +139,8 @@
       detailBadge.textContent = `${pct}% bleu` + (data.en_cours ? " — camion en cours de passage" : "");
     }
 
+    let echecsConsecutifs = 0;
+
     function envoyerImage() {
       if (envoiEnCours || video.videoWidth === 0) return;
       envoiEnCours = true;
@@ -157,10 +159,23 @@
             method: "POST",
             body: formData,
           });
+          if (!reponse.ok) {
+            throw new Error("serveur a répondu " + reponse.status);
+          }
           const data = await reponse.json();
+          if (data.erreur) {
+            throw new Error(data.erreur);
+          }
+          echecsConsecutifs = 0;
+          erreurCam.style.display = "none";
           majBadge(data);
         } catch (err) {
-          // Erreur réseau ponctuelle : on ignore, la prochaine image réessaiera.
+          // Une erreur ponctuelle (frame perdue) est normale ; on ne l'affiche
+          // qu'après plusieurs échecs de suite, pour ne pas alarmer inutilement.
+          echecsConsecutifs += 1;
+          if (echecsConsecutifs >= 3) {
+            afficherErreur("Connexion au serveur d'analyse interrompue : " + err.message);
+          }
         } finally {
           envoiEnCours = false;
         }
