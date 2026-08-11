@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}Caméra (navigateur){% endblock %}
+{% block content %}
+  <h1 class="page-title">Caméra de cet appareil</h1>
+  <p class="page-sub">Utilise la caméra du téléphone ou de l'ordinateur qui affiche cette page — utile quand le serveur n'a pas de webcam locale (déploiement cloud). Nécessite HTTPS.</p>
+
+  <div class="card">
+    <h2>Flux en direct</h2>
+
+    <div class="form-row" style="margin-bottom:1rem;">
+      <div class="field">
+        <label for="deviceSelect">Caméra</label>
+        <select id="deviceSelect" disabled>
+          <option>Cliquez sur « Démarrer » pour autoriser l'accès</option>
+        </select>
+      </div>
+      <button id="btnDemarrer" type="button" class="btn btn-primary">Démarrer la caméra</button>
+      <button id="btnArreter" type="button" class="btn btn-secondary" disabled>Arrêter</button>
+    </div>
+
+    <div id="erreurCam" class="alert alert-error" style="display:none;"></div>
+
+    <div class="video-frame" style="max-width:640px;">
+      <span id="liveBadge" class="live-badge" style="display:none;"><span class="live-dot"></span>En direct</span>
+      <video id="video" autoplay playsinline muted style="width:100%; display:block;"></video>
+    </div>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <p style="margin-top:1rem;">
+      Statut actuel : <span id="statutBadge" class="badge badge-neutre">En attente</span>
+      <span id="detailBadge" class="page-sub" style="margin-left:0.5rem;"></span>
+    </p>
+    <p class="page-sub">Un camion détecté en continu quelques secondes est enregistré automatiquement dans l'historique, comme pour une caméra fixe.</p>
+  </div>
+
+  <script>
+    const csrfToken = "{{ csrf_token() }}";
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const deviceSelect = document.getElementById("deviceSelect");
+    const btnDemarrer = document.getElementById("btnDemarrer");
+    const btnArreter = document.getElementById("btnArreter");
+    const erreurCam = document.getElementById("erreurCam");
+    const liveBadge = document.getElementById("liveBadge");
+    const statutBadge = document.getElementById("statutBadge");
+    const detailBadge = document.getElementById("detailBadge");
+
+    let stream = null;
+    let intervalId = null;
+    let envoiEnCours = false;
+
+    function afficherErreur(message) {
+      erreurCam.textContent = message;
+      erreurCam.style.display = "block";
+    }
+
+    async function listerCameras() {
+      const appareils = await navigator.mediaDevices.enumerateDevices();
+      const cameras = appareils.filter((a) => a.kind === "videoinput");
+      deviceSelect.innerHTML = "";
+      cameras.forEach((cam, i) => {
+        const option = document.createElement("option");
+        option.value = cam.deviceId;
+        option.textContent = cam.label || `Caméra ${i + 1}`;
+        deviceSelect.appendChild(option);
+      });
+      deviceSelect.disabled = cameras.length === 0;
+    }
+
+    async function demarrerFlux(deviceId) {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+      const contraintes = {
+        video: deviceId
+          ? { deviceId: { exact: deviceId } }
+          : { facingMode: "environment" },
+        audio: false,
+      };
+      stream = await navigator.mediaDevices.getUserMedia(contraintes);
+      video.srcObject = stream;
+      liveBadge.style.display = "inline-flex";
+    }
+
+    async function demarrer() {
+      erreurCam.style.display = "none";
+      if (!window.isSecureContext) {
+        afficherErreur("L'accès caméra nécessite une connexion HTTPS.");
+        return;
+      }
+      try {
+        await demarrerFlux(null);
+        await listerCameras();
+        btnDemarrer.disabled = true;
+        btnArreter.disabled = false;
+        deviceSelect.disabled = false;
+
+        intervalId = setInterval(envoyerImage, 1000);
+      } catch (err) {
+        afficherErreur("Impossible d'accéder à la caméra : " + err.message);
+      }
+    }
+
+    function arreter() {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = null;
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+        stream = null;
+      }
+      video.srcObject = null;
+      liveBadge.style.display = "none";
+      btnDemarrer.disabled = false;
+      btnArreter.disabled = true;
+      statutBadge.textContent = "En attente";
+      statutBadge.className = "badge badge-neutre";
+      detailBadge.textContent = "";
+    }
+
+    function majBadge(data) {
+      if (data.erreur) return;
+      if (!data.camion_detecte) {
+        statutBadge.textContent = "Aucun camion";
+        statutBadge.className = "badge badge-neutre";
+        detailBadge.textContent = "";
+        return;
+      }
+      if (data.statut === "Chargé") {
+        statutBadge.textContent = "Chargé";
+        statutBadge.className = "badge badge-charge";
+      } else if (data.statut === "Vide") {
+        statutBadge.textContent = "Vide";
+        statutBadge.className = "badge badge-vide";
+      } else {
+        statutBadge.textContent = data.statut || "—";
+        statutBadge.className = "badge badge-neutre";
+      }
+      const pct = (data.ratio_bleu * 100).toFixed(1);
+      detailBadge.textContent = `${pct}% bleu` + (data.en_cours ? " — camion en cours de passage" : "");
+    }
+
+    function envoyerImage() {
+      if (envoiEnCours || video.videoWidth === 0) return;
+      envoiEnCours = true;
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) { envoiEnCours = false; return; }
+        const formData = new FormData();
+        formData.append("csrf_token", csrfToken);
+        formData.append("image", blob, "frame.jpg");
+        try {
+          const reponse = await fetch("{{ url_for('analyser_frame') }}", {
+            method: "POST",
+            body: formData,
+          });
+          const data = await reponse.json();
+          majBadge(data);
+        } catch (err) {
+          // Erreur réseau ponctuelle : on ignore, la prochaine image réessaiera.
+        } finally {
+          envoiEnCours = false;
+        }
+      }, "image/jpeg", 0.85);
+    }
+
+    btnDemarrer.addEventListener("click", demarrer);
+    btnArreter.addEventListener("click", arreter);
+    deviceSelect.addEventListener("change", async () => {
+      try {
+        await demarrerFlux(deviceSelect.value);
+      } catch (err) {
+        afficherErreur("Impossible de changer de caméra : " + err.message);
+      }
+    });
+  </script>
+{% endblock %}

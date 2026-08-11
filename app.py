@@ -50,6 +50,13 @@ latest_annotated_frame = None
 latest_result = {"camion_detecte": False}
 camera_ok = False
 
+# Suivi de passage pour la caméra navigateur (getUserMedia) : indépendant du
+# camera_worker (webcam locale au serveur), car en déploiement cloud le
+# serveur n'a pas de caméra physique — c'est l'appareil qui ouvre la page
+# (téléphone, PC) qui fournit les images via /analyser_frame.
+suivi_navigateur = SuiviPassage(DUREE_MIN_PRESENCE, DUREE_GRACE_ABSENCE)
+derniere_image_navigateur = None
+
 params_lock = threading.Lock()
 current_params = db.get_parametres()
 
@@ -326,6 +333,66 @@ def analyser():
         return render_template("analyser.html", active="analyser", resultat=resultat, erreur=None)
 
     return render_template("analyser.html", active="analyser", resultat=None, erreur=None)
+
+
+@app.route("/camera_web")
+@login_required
+def camera_web():
+    return render_template("camera_web.html", active="camera_web")
+
+
+@app.route("/analyser_frame", methods=["POST"])
+@login_required
+def analyser_frame():
+    """
+    Reçoit une image capturée par la caméra du navigateur (getUserMedia côté
+    client) et l'analyse comme le ferait camera_worker pour une webcam locale.
+    Alimente le même suivi de passage automatique (voir SuiviPassage).
+    """
+    global derniere_image_navigateur
+
+    fichier = request.files.get("image")
+    if not fichier:
+        return {"erreur": "image manquante"}, 400
+
+    data = np.frombuffer(fichier.read(), np.uint8)
+    frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
+    if frame is None:
+        return {"erreur": "format invalide"}, 400
+
+    p = get_current_params()
+    result = run_pipeline(
+        frame,
+        threshold=float(p["seuil_bleu"]),
+        top_ratio=float(p["top_ratio"]),
+        left_margin=float(p["left_margin"]),
+        right_margin=float(p["right_margin"]),
+    )
+
+    now = time.time()
+    with state_lock:
+        if result["camion_detecte"]:
+            derniere_image_navigateur = annotate_frame(frame.copy(), result)
+
+        passage_termine = suivi_navigateur.observer(result, now)
+        if passage_termine is not None and derniere_image_navigateur is not None:
+            portail_actuel = db.get_portail_actif()
+            if portail_actuel:
+                _enregistrer_passage(
+                    portail_actuel["id"],
+                    derniere_image_navigateur,
+                    passage_termine["statut"],
+                    passage_termine["ratio_bleu"],
+                    passage_termine["confiance"],
+                )
+
+    return {
+        "camion_detecte": result["camion_detecte"],
+        "statut": result.get("statut"),
+        "ratio_bleu": result.get("ratio_bleu", 0.0),
+        "confiance": result.get("confiance"),
+        "en_cours": suivi_navigateur.en_cours,
+    }
 
 
 @app.route("/historique")

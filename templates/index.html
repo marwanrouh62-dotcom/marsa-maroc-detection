@@ -26,7 +26,7 @@
     {% else %}
     <p class="empty-state">
       Aucune caméra en direct disponible sur ce serveur (source injoignable ou absente — normal sur un hébergement cloud sans webcam locale).<br>
-      Utilisez <a class="link" href="{{ url_for('analyser') }}">Analyser une photo</a> pour envoyer une image manuellement, ou configurez une caméra IP (RTSP) dans <a class="link" href="{{ url_for('portails') }}">Portails</a>.
+      Utilisez <a class="link" href="{{ url_for('analyser') }}">Analyser une photo</a>, activez la <a class="link" href="{{ url_for('camera_web') }}">caméra de cet appareil</a> (téléphone, PC), ou configurez une caméra IP (RTSP) dans <a class="link" href="{{ url_for('portails') }}">Portails</a>.
     </p>
     {% endif %}
   </div>
