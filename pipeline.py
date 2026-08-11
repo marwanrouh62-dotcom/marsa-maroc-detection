@@ -10,6 +10,15 @@ from ultralytics import YOLO
 from tarp_analysis import blue_pixel_ratio, decide_status, extract_benne_roi
 
 TRUCK_CLASSES = {7: "truck", 5: "bus"}
+# Un véhicule trop petit dans l'image (trop loin de la caméra) donne une boîte
+# englobante imprécise dont les coins débordent souvent sur l'arrière-plan
+# (typiquement le ciel) plutôt que sur le véhicule — la ROI haut-de-benne
+# capte alors du ciel bleu et déclenche un faux "Chargé". Sur les 9 photos de
+# référence validées (test_images/), la boîte la plus petite d'un vrai camion
+# correctement classé occupe 15.2% de l'image ; un cas réel de fausse
+# détection (camionnette lointaine, ciel bleu en arrière-plan) occupait 8.3%.
+# Seuil fixé à 10%, avec marge des deux côtés.
+MIN_BBOX_AREA_RATIO = 0.10
 # YOLOv8s plutôt que YOLOv8n : confiance moyenne mesurée 0.86 -> 0.92 sur les
 # 6 photos de référence (jusqu'à 0.66 -> 0.94 sur le cas le plus faible),
 # pour un coût d'environ 300-400ms/inférence au lieu de ~180ms — largement
@@ -111,6 +120,12 @@ def run_pipeline(
         return {"camion_detecte": False}
 
     bbox, label, conf = detection
+
+    frame_h, frame_w = frame.shape[:2]
+    x1, y1, x2, y2 = bbox
+    aire_ratio = ((x2 - x1) * (y2 - y1)) / (frame_w * frame_h)
+    if aire_ratio < MIN_BBOX_AREA_RATIO:
+        return {"camion_detecte": False}
 
     caisse_detection = detect_caisse_bbox(frame) if use_modele_caisse else None
     roi_source = "modele"
