@@ -359,3 +359,67 @@ input:focus, select:focus {
   padding: 2rem 1rem;
   font-size: 0.9rem;
 }
+
+/* --- Mobile (~320-640px) --- */
+@media (max-width: 640px) {
+  .navbar {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 0.6rem 1rem;
+    row-gap: 0.5rem;
+  }
+
+  .brand-sub {
+    display: none;
+  }
+
+  .navlinks {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 0.15rem;
+    justify-content: flex-start;
+  }
+
+  .navlinks a {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.6rem;
+  }
+
+  main {
+    padding: 1.25rem 0.9rem 2rem;
+  }
+
+  .page-title {
+    font-size: 1.2rem;
+  }
+
+  .card {
+    padding: 1rem;
+  }
+
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-row .field,
+  .form-row .btn {
+    width: 100%;
+  }
+
+  .form-row a.btn[style*="margin-left:auto"] {
+    margin-left: 0 !important;
+  }
+
+  table {
+    font-size: 0.8rem;
+  }
+
+  th, td {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .video-frame {
+    max-width: 100%;
+  }
+}
